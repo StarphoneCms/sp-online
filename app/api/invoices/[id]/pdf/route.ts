@@ -3,6 +3,22 @@ import { jsPDF } from 'jspdf'
 import { createServerComponentClient } from '@/lib/supabase/server'
 import { shopifyFetch, type ShopifyOrder } from '@/lib/shopify'
 
+// Colors
+const TEAL = { r: 0, g: 180, b: 160 }
+const DARK = { r: 17, g: 24, b: 39 }
+const GRAY = { r: 107, g: 114, b: 128 }
+const LIGHT_GRAY = { r: 243, g: 244, b: 246 }
+const WHITE = { r: 255, g: 255, b: 255 }
+const TEAL_BG = { r: 240, g: 253, b: 250 }
+
+function setColor(doc: jsPDF, c: { r: number; g: number; b: number }) {
+  doc.setTextColor(c.r, c.g, c.b)
+}
+
+function setFill(doc: jsPDF, c: { r: number; g: number; b: number }) {
+  doc.setFillColor(c.r, c.g, c.b)
+}
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -25,102 +41,166 @@ export async function GET(
     const data = await shopifyFetch(`orders/${invoice.shopify_order_id}.json`)
     order = data.order
   } catch {
-    // Order may have been deleted — generate PDF with invoice data only
+    // Order may have been deleted
   }
 
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
   const pageW = 210
-  const marginL = 15
-  const marginR = pageW - 15
-  const contentW = marginR - marginL
+  const mL = 18
+  const mR = pageW - 18
+  const cW = mR - mL
 
-  // ─── HEADER ──────────────────────────────────────────
-  doc.setFontSize(18)
+  const invoiceDate = new Date(invoice.created_at)
+  const dueDate = new Date(invoiceDate)
+  dueDate.setDate(dueDate.getDate() + 14)
+  const fmtDate = (d: Date) => d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+
+  // ─── 1. HEADER ─────────────────────────────────────────
+  // Left: brand
+  doc.setFontSize(22)
   doc.setFont('helvetica', 'bold')
-  doc.text('STARPHONE', marginL, 18)
+  setColor(doc, DARK)
+  doc.text('STARPHONE', mL, 20)
 
+  doc.setFontSize(8)
+  doc.setFont('helvetica', 'normal')
+  setColor(doc, GRAY)
+  doc.text('Professional Electronics', mL, 25)
+
+  // Right: INVOICE title
+  doc.setFontSize(28)
+  doc.setFont('helvetica', 'bold')
+  setColor(doc, { r: 200, g: 200, b: 200 })
+  doc.text('INVOICE', mR, 20, { align: 'right' })
+
+  doc.setFontSize(9)
+  doc.setFont('helvetica', 'bold')
+  setColor(doc, DARK)
+  doc.text(invoice.invoice_number, mR, 26, { align: 'right' })
+
+  // Teal separator
+  doc.setDrawColor(TEAL.r, TEAL.g, TEAL.b)
+  doc.setLineWidth(0.8)
+  doc.line(mL, 31, mR, 31)
+  doc.setLineWidth(0.2)
+
+  // ─── 2. INVOICE META ──────────────────────────────────
+  let y = 38
   doc.setFontSize(7)
   doc.setFont('helvetica', 'normal')
-  doc.text('Ali Kaan Yilmaz e.K. | Blondelstr. 10 | 52062 Aachen | Deutschland', marginL, 24)
-  doc.text('USt-IdNr.: DE351498498 | Steuernr.: 201/5140/4737', marginL, 28)
-  doc.text('Tel: +49 241 91999944 | info@starphone.de', marginL, 32)
+  setColor(doc, GRAY)
 
-  doc.setDrawColor(200)
-  doc.line(marginL, 35, marginR, 35)
+  const metaLeft = [
+    ['Invoice No.', invoice.invoice_number],
+    ['Date', fmtDate(invoiceDate)],
+    ['Order Ref.', invoice.shopify_order_number],
+  ]
+  const metaRight = [
+    ['Payment Due', fmtDate(dueDate)],
+    ['Currency', invoice.currency || 'EUR'],
+    ['Terms', 'Net 14 days'],
+  ]
 
-  // ─── TITLE ───────────────────────────────────────────
-  let title = 'RECHNUNG'
-  if (invoice.invoice_type === 'commercial') title = 'COMMERCIAL INVOICE'
+  metaLeft.forEach(([label, value], i) => {
+    doc.setFont('helvetica', 'normal')
+    setColor(doc, GRAY)
+    doc.text(label, mL, y + i * 5)
+    doc.setFont('helvetica', 'bold')
+    setColor(doc, DARK)
+    doc.text(value, mL + 28, y + i * 5)
+  })
 
-  doc.setFontSize(14)
+  metaRight.forEach(([label, value], i) => {
+    doc.setFont('helvetica', 'normal')
+    setColor(doc, GRAY)
+    doc.text(label, 120, y + i * 5)
+    doc.setFont('helvetica', 'bold')
+    setColor(doc, DARK)
+    doc.text(value, 120 + 28, y + i * 5)
+  })
+
+  // ─── 3. FROM / TO ─────────────────────────────────────
+  y = 60
+
+  // FROM
+  doc.setFontSize(6.5)
   doc.setFont('helvetica', 'bold')
-  doc.text(title, marginL, 44)
+  setColor(doc, TEAL)
+  doc.text('FROM', mL, y)
 
-  // ─── INVOICE META ────────────────────────────────────
   doc.setFontSize(8)
+  doc.setFont('helvetica', 'bold')
+  setColor(doc, DARK)
+  doc.text('Ali Kaan Yilmaz e.K.', mL, y + 5)
   doc.setFont('helvetica', 'normal')
-  doc.text(`Rechnungsnr.: ${invoice.invoice_number}`, marginL, 52)
-  doc.text(`Datum: ${new Date(invoice.created_at).toLocaleDateString('de-DE')}`, marginL, 56)
-  doc.text(`Bestellung: ${invoice.shopify_order_number}`, marginL, 60)
+  doc.setFontSize(7.5)
+  setColor(doc, GRAY)
+  doc.text('Blondelstr. 10, 52062 Aachen, Germany', mL, y + 9.5)
+  doc.text('VAT: DE351498498', mL, y + 14)
+  doc.text('Tax No.: 201/5140/4737', mL, y + 18.5)
 
-  // ─── SENDER & RECIPIENT ─────────────────────────────
-  const addrY = 70
+  // TO
+  const toX = 120
+  doc.setFontSize(6.5)
+  doc.setFont('helvetica', 'bold')
+  setColor(doc, TEAL)
+  doc.text('TO', toX, y)
+
   doc.setFontSize(8)
   doc.setFont('helvetica', 'bold')
-  doc.text('Absender:', marginL, addrY)
-  doc.setFont('helvetica', 'normal')
-  doc.text('Ali Kaan Yilmaz e.K.', marginL, addrY + 4)
-  doc.text('Blondelstr. 10', marginL, addrY + 8)
-  doc.text('52062 Aachen, DE', marginL, addrY + 12)
+  setColor(doc, DARK)
+  doc.text(invoice.customer_name || '\u2014', toX, y + 5)
 
-  const recipientX = 110
-  doc.setFont('helvetica', 'bold')
-  doc.text('Empf\u00e4nger:', recipientX, addrY)
   doc.setFont('helvetica', 'normal')
-  doc.text(invoice.customer_name || '\u2014', recipientX, addrY + 4)
-
-  let ry = addrY + 8
+  doc.setFontSize(7.5)
+  setColor(doc, GRAY)
+  let toY = y + 9.5
   if (order?.billing_address) {
-    const addr = order.billing_address
-    if (addr.company) {
-      doc.text(addr.company, recipientX, ry)
-      ry += 4
+    const a = order.billing_address
+    if (a.company) {
+      doc.text(a.company, toX, toY)
+      toY += 4
     }
-    doc.text(addr.address1, recipientX, ry)
-    ry += 4
-    if (addr.address2) {
-      doc.text(addr.address2, recipientX, ry)
-      ry += 4
+    doc.text(a.address1, toX, toY)
+    toY += 4
+    if (a.address2) {
+      doc.text(a.address2, toX, toY)
+      toY += 4
     }
-    doc.text(`${addr.zip} ${addr.city}`, recipientX, ry)
-    ry += 4
-    doc.text(addr.country, recipientX, ry)
-    ry += 4
+    doc.text(`${a.zip} ${a.city}`, toX, toY)
+    toY += 4
+    doc.text(a.country, toX, toY)
+    toY += 4
   }
   if (invoice.customer_vat) {
-    doc.text(`USt-IdNr.: ${invoice.customer_vat}`, recipientX, ry)
+    doc.setFont('helvetica', 'bold')
+    setColor(doc, DARK)
+    doc.text(`VAT ID: ${invoice.customer_vat}`, toX, toY)
   }
 
-  // ─── LINE ITEMS TABLE ───────────────────────────────
-  let tableY = 100
-  doc.setDrawColor(180)
-  doc.line(marginL, tableY, marginR, tableY)
-  tableY += 5
+  // ─── 4. LINE ITEMS TABLE ──────────────────────────────
+  y = 96
 
-  const col = { pos: marginL, desc: 25, qty: 120, unit: 145, total: 175 }
+  // Column positions
+  const c = { num: mL, desc: mL + 10, qty: 130, unit: 158, total: mR }
+  const rowH = 6
 
-  doc.setFontSize(7)
+  // Header row - dark background
+  setFill(doc, DARK)
+  doc.rect(mL, y - 4, cW, rowH + 1, 'F')
+
+  doc.setFontSize(6.5)
   doc.setFont('helvetica', 'bold')
-  doc.text('Pos', col.pos, tableY)
-  doc.text('Beschreibung', col.desc, tableY)
-  doc.text('Menge', col.qty, tableY, { align: 'right' })
-  doc.text('Einzelpreis', col.unit, tableY, { align: 'right' })
-  doc.text('Gesamt', marginR, tableY, { align: 'right' })
+  setColor(doc, WHITE)
+  doc.text('#', c.num + 2, y)
+  doc.text('Description', c.desc, y)
+  doc.text('Qty', c.qty, y, { align: 'right' })
+  doc.text('Unit Price', c.unit, y, { align: 'right' })
+  doc.text('Total', c.total, y, { align: 'right' })
 
-  tableY += 3
-  doc.line(marginL, tableY, marginR, tableY)
-  tableY += 5
+  y += rowH + 1
 
+  // Rows
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(7)
   const lineItems = order?.line_items || []
@@ -130,89 +210,166 @@ export async function GET(
     const lineTotal = item.quantity * parseFloat(item.price)
     subtotal += lineTotal
 
-    doc.text(String(i + 1), col.pos, tableY)
-    // Truncate long titles
-    const titleText = item.title.length > 50 ? item.title.substring(0, 47) + '...' : item.title
-    doc.text(titleText, col.desc, tableY)
-    doc.text(String(item.quantity), col.qty, tableY, { align: 'right' })
-    doc.text(`${parseFloat(item.price).toFixed(2)} ${invoice.currency}`, col.unit, tableY, { align: 'right' })
-    doc.text(`${lineTotal.toFixed(2)} ${invoice.currency}`, marginR, tableY, { align: 'right' })
-    tableY += 5
+    // Alternating background
+    if (i % 2 === 1) {
+      setFill(doc, LIGHT_GRAY)
+      doc.rect(mL, y - 3.5, cW, rowH, 'F')
+    }
+
+    setColor(doc, GRAY)
+    doc.text(String(i + 1), c.num + 2, y)
+    setColor(doc, DARK)
+    const titleText = item.title.length > 55 ? item.title.substring(0, 52) + '...' : item.title
+    doc.text(titleText, c.desc, y)
+    setColor(doc, GRAY)
+    doc.text(String(item.quantity), c.qty, y, { align: 'right' })
+    doc.text(`${parseFloat(item.price).toFixed(2)} ${invoice.currency}`, c.unit, y, { align: 'right' })
+    doc.setFont('helvetica', 'bold')
+    setColor(doc, DARK)
+    doc.text(`${lineTotal.toFixed(2)} ${invoice.currency}`, c.total, y, { align: 'right' })
+    doc.setFont('helvetica', 'normal')
+    y += rowH
   })
 
   if (lineItems.length === 0) {
-    doc.text('(Positionen nicht verf\u00fcgbar)', col.desc, tableY)
+    setColor(doc, GRAY)
+    doc.text('(Line items not available)', c.desc, y)
     subtotal = parseFloat(invoice.amount) || 0
-    tableY += 5
+    y += rowH
   }
 
-  // ─── TOTALS ──────────────────────────────────────────
-  tableY += 3
-  doc.line(col.unit - 10, tableY, marginR, tableY)
-  tableY += 5
+  // Bottom line of table
+  doc.setDrawColor(TEAL.r, TEAL.g, TEAL.b)
+  doc.setLineWidth(0.4)
+  doc.line(mL, y - 2, mR, y - 2)
+  doc.setLineWidth(0.2)
+
+  // ─── 5. TOTALS BOX ───────────────────────────────────
+  y += 4
+  const totalsX = 130
+  const totalsValX = mR
 
   doc.setFontSize(8)
   doc.setFont('helvetica', 'normal')
+  setColor(doc, GRAY)
+
+  let vatLabel: string
+  let vatAmount: number
+  let netAmount: number
 
   if (invoice.invoice_type === 'standard') {
-    const netAmount = subtotal / 1.19
-    const vatAmount = subtotal - netAmount
-    doc.text('Nettobetrag:', col.unit - 10, tableY)
-    doc.text(`${netAmount.toFixed(2)} ${invoice.currency}`, marginR, tableY, { align: 'right' })
-    tableY += 5
-    doc.text('MwSt. 19%:', col.unit - 10, tableY)
-    doc.text(`${vatAmount.toFixed(2)} ${invoice.currency}`, marginR, tableY, { align: 'right' })
-    tableY += 5
+    netAmount = subtotal / 1.19
+    vatAmount = subtotal - netAmount
+    vatLabel = 'VAT (19%)'
+  } else if (invoice.invoice_type === 'reverse_charge') {
+    netAmount = subtotal
+    vatAmount = 0
+    vatLabel = 'VAT (0% Reverse Charge)'
   } else {
-    doc.text('Nettobetrag:', col.unit - 10, tableY)
-    doc.text(`${subtotal.toFixed(2)} ${invoice.currency}`, marginR, tableY, { align: 'right' })
-    tableY += 5
-    doc.text('MwSt. 0%:', col.unit - 10, tableY)
-    doc.text(`0.00 ${invoice.currency}`, marginR, tableY, { align: 'right' })
-    tableY += 5
+    netAmount = subtotal
+    vatAmount = 0
+    vatLabel = 'VAT (0% Export)'
   }
 
+  doc.text('Subtotal', totalsX, y)
+  setColor(doc, DARK)
+  doc.text(`${netAmount.toFixed(2)} ${invoice.currency}`, totalsValX, y, { align: 'right' })
+
+  y += 5.5
+  setColor(doc, GRAY)
+  doc.text(vatLabel, totalsX, y)
+  setColor(doc, DARK)
+  doc.text(`${vatAmount.toFixed(2)} ${invoice.currency}`, totalsValX, y, { align: 'right' })
+
+  y += 4
+  doc.setDrawColor(DARK.r, DARK.g, DARK.b)
+  doc.setLineWidth(0.6)
+  doc.line(totalsX, y, mR, y)
+  doc.setLineWidth(0.2)
+
+  y += 5.5
+  doc.setFontSize(11)
   doc.setFont('helvetica', 'bold')
-  doc.text('Gesamtbetrag:', col.unit - 10, tableY)
-  doc.text(`${(parseFloat(invoice.amount) || subtotal).toFixed(2)} ${invoice.currency}`, marginR, tableY, { align: 'right' })
-  tableY += 10
+  setColor(doc, DARK)
+  doc.text('TOTAL', totalsX, y)
+  doc.text(`${(parseFloat(invoice.amount) || subtotal).toFixed(2)} ${invoice.currency}`, totalsValX, y, { align: 'right' })
 
-  // ─── COMMERCIAL INVOICE FIELDS ──────────────────────
-  if (invoice.invoice_type === 'commercial') {
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(7)
-    doc.text('HS-Code: \u2014', marginL, tableY)
-    doc.text('Country of Origin: DE', marginL, tableY + 4)
-    doc.text(`Customs Value: ${(parseFloat(invoice.amount) || subtotal).toFixed(2)} ${invoice.currency}`, marginL, tableY + 8)
-    tableY += 16
-  }
+  // ─── 6. LEGAL TEXT BOX ────────────────────────────────
+  y += 14
 
-  // ─── LEGAL TEXT ──────────────────────────────────────
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(6)
-
+  let legalText = ''
   if (invoice.invoice_type === 'reverse_charge') {
-    doc.text(
-      'Steuerschuldnerschaft des Leistungsempf\u00e4ngers gem\u00e4\u00df \u00a713b UStG (Reverse Charge). ' +
-      `USt-IdNr. des Leistungsempf\u00e4ngers: ${invoice.customer_vat || '\u2014'}`,
-      marginL, tableY, { maxWidth: contentW }
-    )
+    legalText =
+      'Tax liability transfers to the recipient pursuant to Art. 196 EU VAT Directive / ' +
+      `\u00a713b UStG (Reverse Charge). Customer VAT ID: ${invoice.customer_vat || '\u2014'}`
   } else if (invoice.invoice_type === 'commercial') {
-    doc.text(
-      'Steuerfreie Ausfuhrlieferung gem\u00e4\u00df \u00a74 Nr. 1a UStG.',
-      marginL, tableY, { maxWidth: contentW }
-    )
+    legalText =
+      'VAT-exempt export delivery pursuant to \u00a74 No. 1a UStG. ' +
+      `Customs Value: ${(parseFloat(invoice.amount) || subtotal).toFixed(2)} ${invoice.currency}`
+  } else {
+    legalText = 'All prices include 19% VAT. Payment due within 14 days.'
   }
 
-  // ─── FOOTER ──────────────────────────────────────────
+  // Teal background box
+  setFill(doc, TEAL_BG)
+  const legalBoxH = 12
+  doc.rect(mL, y - 3, cW, legalBoxH, 'F')
+
+  // Left accent bar
+  doc.setFillColor(TEAL.r, TEAL.g, TEAL.b)
+  doc.rect(mL, y - 3, 1.2, legalBoxH, 'F')
+
+  doc.setFontSize(7)
+  doc.setFont('helvetica', 'normal')
+  setColor(doc, DARK)
+  doc.text(legalText, mL + 5, y + 1, { maxWidth: cW - 10 })
+
+  // ─── COMMERCIAL EXTRA FIELDS ──────────────────────────
+  if (invoice.invoice_type === 'commercial') {
+    y += legalBoxH + 4
+    doc.setFontSize(7)
+    setColor(doc, GRAY)
+    doc.text('HS Code: \u2014', mL, y)
+    doc.text('Country of Origin: Germany (DE)', mL + 50, y)
+  }
+
+  // ─── 7. FOOTER ────────────────────────────────────────
   const footerY = 272
-  doc.setDrawColor(200)
-  doc.line(marginL, footerY, marginR, footerY)
+  doc.setDrawColor(TEAL.r, TEAL.g, TEAL.b)
+  doc.setLineWidth(0.5)
+  doc.line(mL, footerY, mR, footerY)
+  doc.setLineWidth(0.2)
+
   doc.setFontSize(6)
   doc.setFont('helvetica', 'normal')
-  doc.text('Ali Kaan Yilmaz e.K. | Blondelstr. 10 | 52062 Aachen', marginL, footerY + 4)
-  doc.text('Sparkasse Aachen | IBAN: DE91 3905 0000 1073 5765 63 | BIC: AACSDE33', marginL, footerY + 8)
-  doc.text('USt-IdNr.: DE351498498 | Steuernr.: 201/5140/4737 | info@starphone.de', marginL, footerY + 12)
+  setColor(doc, GRAY)
+
+  // Column 1: Bank
+  const f1 = mL
+  doc.setFont('helvetica', 'bold')
+  doc.text('Bank Details', f1, footerY + 4.5)
+  doc.setFont('helvetica', 'normal')
+  doc.text('Sparkasse Aachen', f1, footerY + 8.5)
+  doc.text('IBAN: DE91 3905 0000 1073 5765 63', f1, footerY + 12)
+  doc.text('BIC: AACSDE33', f1, footerY + 15.5)
+
+  // Column 2: Company
+  const f2 = 80
+  doc.setFont('helvetica', 'bold')
+  doc.text('Company', f2, footerY + 4.5)
+  doc.setFont('helvetica', 'normal')
+  doc.text('Ali Kaan Yilmaz e.K.', f2, footerY + 8.5)
+  doc.text('VAT: DE351498498', f2, footerY + 12)
+  doc.text('Tax No.: 201/5140/4737', f2, footerY + 15.5)
+
+  // Column 3: Contact
+  const f3 = 145
+  doc.setFont('helvetica', 'bold')
+  doc.text('Contact', f3, footerY + 4.5)
+  doc.setFont('helvetica', 'normal')
+  doc.text('info@starphone.de', f3, footerY + 8.5)
+  doc.text('+49 241 91999944', f3, footerY + 12)
+  doc.text('starphone.de', f3, footerY + 15.5)
 
   const pdfOutput = doc.output('arraybuffer')
 
