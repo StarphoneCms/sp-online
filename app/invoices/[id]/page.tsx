@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createServerComponentClient } from "@/lib/supabase/server";
 import { shopifyFetch, type ShopifyOrder } from "@/lib/shopify";
+import SendEmailButton from "./SendEmailButton";
 
 const typeLabels: Record<string, string> = {
   standard: "Standard",
@@ -51,14 +52,6 @@ export default async function InvoiceDetailPage({
     // Order may no longer exist
   }
 
-  const mailtoSubject = encodeURIComponent(
-    `Rechnung ${invoice.invoice_number} \u2014 Bestellung ${invoice.shopify_order_number}`
-  );
-  const mailtoBody = encodeURIComponent(
-    `Sehr geehrte Damen und Herren,\n\nanbei erhalten Sie die Rechnung ${invoice.invoice_number} zu Ihrer Bestellung ${invoice.shopify_order_number}.\n\nMit freundlichen Gr\u00fc\u00dfen\nAli Kaan Yilmaz e.K.\nStarphone`
-  );
-  const mailtoLink = `mailto:${invoice.customer_email || ""}?subject=${mailtoSubject}&body=${mailtoBody}`;
-
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       <Link
@@ -96,14 +89,10 @@ export default async function InvoiceDetailPage({
         >
           PDF öffnen
         </a>
-        <a
-          href={mailtoLink}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="rounded-md border border-gray-300 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-        >
-          E-Mail senden
-        </a>
+        <SendEmailButton
+          invoiceId={invoice.id}
+          customerEmail={invoice.customer_email}
+        />
         <Link
           href={`/invoices/${invoice.id}/edit`}
           className="rounded-md border border-gray-300 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
