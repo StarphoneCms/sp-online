@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { jsPDF } from 'jspdf'
 import { createServerComponentClient } from '@/lib/supabase/server'
 import { shopifyFetch, type ShopifyOrder } from '@/lib/shopify'
+import { LOGO_BASE64 } from '@/lib/logo'
 
 // Colors
 const TEAL = { r: 0, g: 180, b: 160 }
@@ -56,16 +57,8 @@ export async function GET(
   const fmtDate = (d: Date) => d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 
   // ─── 1. HEADER ─────────────────────────────────────────
-  // Left: brand
-  doc.setFontSize(22)
-  doc.setFont('helvetica', 'bold')
-  setColor(doc, DARK)
-  doc.text('STARPHONE', mL, 20)
-
-  doc.setFontSize(8)
-  doc.setFont('helvetica', 'normal')
-  setColor(doc, GRAY)
-  doc.text('Professional Electronics', mL, 25)
+  // Left: logo image
+  doc.addImage(`data:image/jpeg;base64,${LOGO_BASE64}`, 'JPEG', mL, 10, 50, 12.5)
 
   // Right: INVOICE title
   doc.setFontSize(28)

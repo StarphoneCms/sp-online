@@ -104,6 +104,12 @@ export default async function InvoiceDetailPage({
         >
           E-Mail senden
         </a>
+        <Link
+          href={`/invoices/${invoice.id}/edit`}
+          className="rounded-md border border-gray-300 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+        >
+          Bearbeiten
+        </Link>
       </div>
 
       <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2">

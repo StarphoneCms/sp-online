@@ -30,12 +30,20 @@ export default async function InvoicesPage() {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Rechnungen</h1>
-        <Link
-          href="/orders"
-          className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 transition-colors"
-        >
-          Neue Rechnung
-        </Link>
+        <div className="flex gap-3">
+          <Link
+            href="/invoices/new"
+            className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 transition-colors"
+          >
+            Neue Rechnung
+          </Link>
+          <Link
+            href="/orders"
+            className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            Aus Bestellung
+          </Link>
+        </div>
       </div>
 
       <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -132,7 +140,14 @@ export default async function InvoicesPage() {
                     </Link>
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
-                    {invoice.shopify_order_number}
+                    <span className="flex items-center gap-1.5">
+                      {invoice.shopify_order_number}
+                      {invoice.shopify_order_id === "manual" && (
+                        <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+                          Manuell
+                        </span>
+                      )}
+                    </span>
                   </td>
                   <td className="px-6 py-4 text-sm">
                     <div className="text-gray-900">{invoice.customer_name}</div>
@@ -167,6 +182,12 @@ export default async function InvoicesPage() {
                       >
                         PDF herunterladen
                       </a>
+                      <Link
+                        href={`/invoices/${invoice.id}/edit`}
+                        className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                      >
+                        Bearbeiten
+                      </Link>
                       <Link
                         href={`/invoices/${invoice.id}`}
                         className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"

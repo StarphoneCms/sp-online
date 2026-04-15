@@ -35,13 +35,7 @@ export default function RootLayout({
               <Link href="/" className="text-xl font-bold tracking-tight">
                 SP Online
               </Link>
-              <nav className="flex gap-6 text-sm font-medium">
-                <Link
-                  href="/"
-                  className="hover:text-gray-300 transition-colors"
-                >
-                  Dashboard
-                </Link>
+              <nav className="flex items-center gap-6 text-sm font-medium">
                 <Link
                   href="/orders"
                   className="hover:text-gray-300 transition-colors"
@@ -53,6 +47,12 @@ export default function RootLayout({
                   className="hover:text-gray-300 transition-colors"
                 >
                   Rechnungen
+                </Link>
+                <Link
+                  href="/invoices/new"
+                  className="rounded-md bg-teal-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-teal-500 transition-colors"
+                >
+                  + Neue Rechnung
                 </Link>
               </nav>
             </div>
