@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { shopifyFetch, detectInvoiceType } from "@/lib/shopify";
+import { shopifyFetch, fetchCustomerTaxNumber, detectInvoiceType } from "@/lib/shopify";
 import InvoiceForm from "./InvoiceForm";
 
 export default async function OrderDetailPage({
@@ -11,6 +11,7 @@ export default async function OrderDetailPage({
 
   let order;
   let error: string | null = null;
+  let taxNumber: string | null = null;
 
   try {
     const data = await shopifyFetch(`orders/${id}.json`);
@@ -18,6 +19,10 @@ export default async function OrderDetailPage({
   } catch (e) {
     error =
       e instanceof Error ? e.message : "Fehler beim Laden der Bestellung";
+  }
+
+  if (order?.customer?.id) {
+    taxNumber = await fetchCustomerTaxNumber(order.customer.id);
   }
 
   if (error || !order) {
@@ -38,7 +43,7 @@ export default async function OrderDetailPage({
     );
   }
 
-  const invoiceType = detectInvoiceType(order);
+  const invoiceType = detectInvoiceType(order, taxNumber);
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
@@ -58,7 +63,11 @@ export default async function OrderDetailPage({
       </p>
 
       <div className="mt-8">
-        <InvoiceForm order={order} detectedType={invoiceType} />
+        <InvoiceForm
+          order={order}
+          detectedType={invoiceType}
+          shopifyTaxNumber={taxNumber}
+        />
       </div>
     </div>
   );

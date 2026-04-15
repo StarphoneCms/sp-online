@@ -79,13 +79,25 @@ export interface ShopifyOrder {
     first_name: string
     last_name: string
     email: string
+    tax_exemptions?: string[]
   }
   note_attributes?: { name: string; value: string }[]
 }
 
 export type InvoiceType = 'reverse_charge' | 'commercial' | 'standard'
 
-export function detectInvoiceType(order: ShopifyOrder): InvoiceType {
+export async function fetchCustomerTaxNumber(customerId: number): Promise<string | null> {
+  try {
+    const data = await shopifyFetch(`customers/${customerId}.json`)
+    const customer = data.customer
+    if (customer?.tax_number) return customer.tax_number
+    return null
+  } catch {
+    return null
+  }
+}
+
+export function detectInvoiceType(order: ShopifyOrder, taxNumber?: string | null): InvoiceType {
   const countryCode = order.billing_address?.country_code || order.shipping_address?.country_code
 
   if (!countryCode) return 'standard'
@@ -93,8 +105,14 @@ export function detectInvoiceType(order: ShopifyOrder): InvoiceType {
   // Germany = standard domestic invoice
   if (countryCode === 'DE') return 'standard'
 
-  // EU country (not DE) = reverse charge
-  if (EU_COUNTRIES.includes(countryCode)) return 'reverse_charge'
+  // EU country (not DE)
+  if (EU_COUNTRIES.includes(countryCode)) {
+    // If customer has tax exemption or tax number → reverse charge
+    const hasVatExemption = order.customer?.tax_exemptions?.includes('eu_vat_exempt')
+    if (hasVatExemption || taxNumber) return 'reverse_charge'
+    // EU without VAT info → still reverse charge (B2B default for EU)
+    return 'reverse_charge'
+  }
 
   // Non-EU = commercial invoice (export)
   return 'commercial'

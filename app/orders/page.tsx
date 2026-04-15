@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
   shopifyFetch,
+  fetchCustomerTaxNumber,
   detectInvoiceType,
   type ShopifyOrder,
   type InvoiceType,
@@ -41,11 +42,38 @@ export default async function OrdersPage({
     const data = await shopifyFetch("orders.json?status=any&limit=50");
     orders = data.orders || [];
   } catch (e) {
-    error = e instanceof Error ? e.message : "Fehler beim Laden der Bestellungen";
+    error =
+      e instanceof Error ? e.message : "Fehler beim Laden der Bestellungen";
+  }
+
+  // Fetch tax numbers for all customers in parallel
+  const taxNumberMap = new Map<number, string | null>();
+  if (orders.length > 0) {
+    const customerIds = [
+      ...new Set(
+        orders
+          .map((o) => o.customer?.id)
+          .filter((id): id is number => id !== undefined)
+      ),
+    ];
+    const results = await Promise.all(
+      customerIds.map(async (cid) => {
+        const taxNum = await fetchCustomerTaxNumber(cid);
+        return [cid, taxNum] as const;
+      })
+    );
+    for (const [cid, taxNum] of results) {
+      taxNumberMap.set(cid, taxNum);
+    }
   }
 
   const filteredOrders = filterType
-    ? orders.filter((o) => detectInvoiceType(o) === filterType)
+    ? orders.filter((o) => {
+        const taxNum = o.customer?.id
+          ? taxNumberMap.get(o.customer.id) ?? null
+          : null;
+        return detectInvoiceType(o, taxNum) === filterType;
+      })
     : orders;
 
   return (
@@ -103,7 +131,7 @@ export default async function OrdersPage({
         </div>
       )}
 
-      <div className="mt-6 overflow-hidden rounded-lg border border-gray-200 shadow-sm">
+      <div className="mt-6 overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
@@ -120,6 +148,9 @@ export default async function OrdersPage({
                 Land
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                USt-IdNr.
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                 Rechnungstyp
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
@@ -134,7 +165,7 @@ export default async function OrdersPage({
             {filteredOrders.length === 0 ? (
               <tr>
                 <td
-                  colSpan={7}
+                  colSpan={8}
                   className="px-6 py-8 text-center text-sm text-gray-500"
                 >
                   Keine Bestellungen gefunden.
@@ -142,16 +173,19 @@ export default async function OrdersPage({
               </tr>
             ) : (
               filteredOrders.map((order) => {
-                const invoiceType = detectInvoiceType(order);
+                const taxNumber = order.customer?.id
+                  ? taxNumberMap.get(order.customer.id) ?? null
+                  : null;
+                const invoiceType = detectInvoiceType(order, taxNumber);
                 const country =
                   order.billing_address?.country ||
                   order.shipping_address?.country ||
-                  "—";
+                  "\u2014";
                 const customerName =
                   order.billing_address?.name ||
                   (order.customer
                     ? `${order.customer.first_name} ${order.customer.last_name}`
-                    : "—");
+                    : "\u2014");
 
                 return (
                   <tr key={order.id} className="hover:bg-gray-50">
@@ -166,6 +200,13 @@ export default async function OrdersPage({
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
                       {country}
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
+                      {taxNumber ? (
+                        <span className="font-mono text-xs">{taxNumber}</span>
+                      ) : (
+                        <span className="text-gray-300">\u2014</span>
+                      )}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm">
                       <InvoiceTypeBadge type={invoiceType} />

@@ -14,14 +14,16 @@ function isValidVatFormat(vat: string): boolean {
 export default function InvoiceForm({
   order,
   detectedType,
+  shopifyTaxNumber,
 }: {
   order: ShopifyOrder;
   detectedType: InvoiceType;
+  shopifyTaxNumber?: string | null;
 }) {
   const router = useRouter();
   const [invoiceType, setInvoiceType] = useState<InvoiceType>(detectedType);
-  const [vatNumber, setVatNumber] = useState("");
-  const [vatTouched, setVatTouched] = useState(false);
+  const [vatNumber, setVatNumber] = useState(shopifyTaxNumber || "");
+  const [vatTouched, setVatTouched] = useState(!!shopifyTaxNumber);
   const [hsCode, setHsCode] = useState("");
   const [countryOfOrigin, setCountryOfOrigin] = useState("DE");
   const [saving, setSaving] = useState(false);
