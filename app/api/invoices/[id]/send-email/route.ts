@@ -51,10 +51,13 @@ export async function POST(
       to: invoice.customer_email,
       subject: `Invoice ${invoice.invoice_number} - Starphone`,
       text:
-        `Dear Customer,\n\n` +
-        `Please find attached the invoice ${invoice.invoice_number} for your order ${invoice.shopify_order_number}.\n\n` +
-        `If you have any questions, please contact us at info@starphone.de.\n\n` +
-        `Best regards,\nAli Kaan Yilmaz e.K.\nStarphone`,
+        `Dear ${invoice.customer_name || 'Customer'},\n\n` +
+        `Please find attached invoice ${invoice.invoice_number} for your order ${invoice.shopify_order_number}.\n\n` +
+        `If you have any questions, please don't hesitate to contact us.\n\n` +
+        `Best regards,\n\n` +
+        `Starphone Team\n` +
+        `info@starphone.de | +49 241 401 37 37\n` +
+        `Blondelstr. 10, 52062 Aachen, Germany`,
       attachments: [
         {
           filename: `${invoice.invoice_number}.pdf`,
