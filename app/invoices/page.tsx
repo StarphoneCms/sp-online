@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createServerComponentClient } from "@/lib/supabase/server";
 
 export default async function InvoicesPage() {
@@ -41,7 +42,7 @@ export default async function InvoicesPage() {
                 Datum
               </th>
               <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
-                Aktion
+                Aktionen
               </th>
             </tr>
           </thead>
@@ -71,7 +72,12 @@ export default async function InvoicesPage() {
                 return (
                   <tr key={invoice.id} className="hover:bg-gray-50">
                     <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
-                      {invoice.invoice_number}
+                      <Link
+                        href={`/invoices/${invoice.id}`}
+                        className="hover:underline"
+                      >
+                        {invoice.invoice_number}
+                      </Link>
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
                       {invoice.shopify_order_number}
@@ -96,20 +102,23 @@ export default async function InvoicesPage() {
                       {new Date(invoice.created_at).toLocaleDateString("de-DE")}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-right text-sm">
-                      {invoice.pdf_url ? (
+                      <div className="flex items-center justify-end gap-2">
                         <a
-                          href={invoice.pdf_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                          href={`/api/invoices/${invoice.id}/pdf`}
+                          download={`${invoice.invoice_number}.pdf`}
                           className="rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800 transition-colors"
                         >
-                          PDF Download
+                          PDF herunterladen
                         </a>
-                      ) : (
-                        <span className="text-xs text-gray-400">
-                          Kein PDF
-                        </span>
-                      )}
+                        <a
+                          href={`/api/invoices/${invoice.id}/pdf`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                        >
+                          Anzeigen
+                        </a>
+                      </div>
                     </td>
                   </tr>
                 );

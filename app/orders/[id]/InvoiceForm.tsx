@@ -1,8 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { type ShopifyOrder, type InvoiceType } from "@/lib/shopify";
 import { createClient } from "@/lib/supabase/client";
+
+const VAT_REGEX = /^(AT|BE|BG|HR|CY|CZ|DK|EE|FI|FR|DE|GR|HU|IE|IT|LV|LT|LU|MT|NL|PL|PT|RO|SK|SI|ES|SE)[A-Z0-9]{2,13}$/;
+
+function isValidVatFormat(vat: string): boolean {
+  return VAT_REGEX.test(vat.replace(/\s/g, "").toUpperCase());
+}
 
 export default function InvoiceForm({
   order,
@@ -11,12 +18,13 @@ export default function InvoiceForm({
   order: ShopifyOrder;
   detectedType: InvoiceType;
 }) {
+  const router = useRouter();
   const [invoiceType, setInvoiceType] = useState<InvoiceType>(detectedType);
   const [vatNumber, setVatNumber] = useState("");
+  const [vatTouched, setVatTouched] = useState(false);
   const [hsCode, setHsCode] = useState("");
   const [countryOfOrigin, setCountryOfOrigin] = useState("DE");
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
 
   const customerName =
     order.billing_address?.name ||
@@ -24,46 +32,46 @@ export default function InvoiceForm({
       ? `${order.customer.first_name} ${order.customer.last_name}`
       : "");
 
+  const vatNormalized = vatNumber.replace(/\s/g, "").toUpperCase();
+  const vatValid = vatNormalized.length > 0 && isValidVatFormat(vatNormalized);
+  const vatInvalid = vatTouched && vatNormalized.length > 0 && !vatValid;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+
+    if (invoiceType === "reverse_charge" && !vatValid) {
+      setVatTouched(true);
+      return;
+    }
+
     setSaving(true);
 
     const supabase = createClient();
-
     const invoiceNumber = `RE-${order.name.replace("#", "")}-${Date.now()}`;
 
-    const { error } = await supabase.from("shopify_invoices").insert({
-      shopify_order_id: String(order.id),
-      shopify_order_number: order.name,
-      invoice_number: invoiceNumber,
-      invoice_type: invoiceType,
-      customer_name: customerName,
-      customer_email: order.email,
-      customer_vat: invoiceType === "reverse_charge" ? vatNumber : null,
-      amount: parseFloat(order.total_price),
-      currency: order.currency,
-    });
+    const { data, error } = await supabase
+      .from("shopify_invoices")
+      .insert({
+        shopify_order_id: String(order.id),
+        shopify_order_number: order.name,
+        invoice_number: invoiceNumber,
+        invoice_type: invoiceType,
+        customer_name: customerName,
+        customer_email: order.email,
+        customer_vat: invoiceType === "reverse_charge" ? vatNormalized : null,
+        amount: parseFloat(order.total_price),
+        currency: order.currency,
+      })
+      .select("id")
+      .single();
 
     setSaving(false);
 
-    if (error) {
-      alert("Fehler beim Speichern: " + error.message);
+    if (error || !data) {
+      alert("Fehler beim Speichern: " + (error?.message || "Unbekannter Fehler"));
     } else {
-      setSaved(true);
+      router.push(`/invoices/${data.id}`);
     }
-  }
-
-  if (saved) {
-    return (
-      <div className="rounded-lg border border-green-200 bg-green-50 p-6">
-        <h3 className="text-lg font-semibold text-green-800">
-          Rechnung erstellt
-        </h3>
-        <p className="mt-1 text-sm text-green-700">
-          Die Rechnung wurde erfolgreich gespeichert.
-        </p>
-      </div>
-    );
   }
 
   return (
@@ -145,14 +153,41 @@ export default function InvoiceForm({
           <label className="block text-sm font-medium text-purple-900">
             USt-IdNr. des Kunden *
           </label>
-          <input
-            type="text"
-            value={vatNumber}
-            onChange={(e) => setVatNumber(e.target.value)}
-            placeholder="z.B. ATU12345678"
-            required
-            className="mt-1 block w-full rounded-md border border-purple-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
-          />
+          <div className="relative mt-1">
+            <input
+              type="text"
+              value={vatNumber}
+              onChange={(e) => {
+                setVatNumber(e.target.value);
+                if (!vatTouched) setVatTouched(true);
+              }}
+              onBlur={() => setVatTouched(true)}
+              placeholder="z.B. ATU12345678"
+              required
+              className={`block w-full rounded-md border bg-white px-3 py-2 pr-10 text-sm shadow-sm focus:outline-none focus:ring-1 ${
+                vatValid
+                  ? "border-green-400 focus:border-green-500 focus:ring-green-500"
+                  : vatInvalid
+                    ? "border-red-400 focus:border-red-500 focus:ring-red-500"
+                    : "border-purple-300 focus:border-purple-500 focus:ring-purple-500"
+              }`}
+            />
+            {vatValid && (
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-green-500 text-lg">
+                &#10003;
+              </span>
+            )}
+            {vatInvalid && (
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-red-500 text-lg">
+                &#10007;
+              </span>
+            )}
+          </div>
+          {vatInvalid && (
+            <p className="mt-1 text-xs text-red-600">
+              Ungültiges Format. USt-IdNr. muss mit 2-stelligem Ländercode beginnen, gefolgt von Zahlen/Buchstaben (z.B. DE123456789, NL123456789B01).
+            </p>
+          )}
         </div>
       )}
 
@@ -215,7 +250,7 @@ export default function InvoiceForm({
                     {item.title}
                   </td>
                   <td className="px-4 py-2 text-sm text-gray-500">
-                    {item.sku || "—"}
+                    {item.sku || "\u2014"}
                   </td>
                   <td className="px-4 py-2 text-right text-sm text-gray-600">
                     {item.quantity}
@@ -245,7 +280,7 @@ export default function InvoiceForm({
 
       <button
         type="submit"
-        disabled={saving}
+        disabled={saving || (invoiceType === "reverse_charge" && !vatValid)}
         className="rounded-md bg-gray-900 px-6 py-2.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50 transition-colors"
       >
         {saving ? "Wird gespeichert..." : "Rechnung erstellen"}
