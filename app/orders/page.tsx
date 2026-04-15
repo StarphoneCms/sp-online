@@ -15,13 +15,13 @@ function InvoiceTypeBadge({ type }: { type: InvoiceType }) {
   };
   const labels: Record<InvoiceType, string> = {
     standard: "Standard",
-    reverse_charge: "Reverse Charge",
-    commercial: "Commercial",
+    reverse_charge: "RC",
+    commercial: "Export",
   };
 
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${styles[type]}`}
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${styles[type]}`}
     >
       {labels[type]}
     </span>
@@ -46,7 +46,6 @@ export default async function OrdersPage({
       e instanceof Error ? e.message : "Fehler beim Laden der Bestellungen";
   }
 
-  // Fetch tax numbers for all customers in parallel
   const taxNumberMap = new Map<number, string | null>();
   if (orders.length > 0) {
     const customerIds = [
@@ -77,86 +76,61 @@ export default async function OrdersPage({
     : orders;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+    <div className="max-w-6xl mx-auto px-4 py-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Bestellungen</h1>
+        <h1 className="text-xl font-bold text-gray-900">Bestellungen</h1>
       </div>
 
-      <div className="mt-4 flex gap-2">
-        <Link
-          href="/orders"
-          className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-            !filterType
-              ? "bg-gray-900 text-white"
-              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-          }`}
-        >
-          Alle
-        </Link>
-        <Link
-          href="/orders?type=standard"
-          className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-            filterType === "standard"
-              ? "bg-gray-900 text-white"
-              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-          }`}
-        >
-          Standard
-        </Link>
-        <Link
-          href="/orders?type=reverse_charge"
-          className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-            filterType === "reverse_charge"
-              ? "bg-gray-900 text-white"
-              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-          }`}
-        >
-          Reverse Charge
-        </Link>
-        <Link
-          href="/orders?type=commercial"
-          className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-            filterType === "commercial"
-              ? "bg-gray-900 text-white"
-              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-          }`}
-        >
-          Commercial
-        </Link>
+      <div className="mt-3 flex gap-1.5">
+        {([
+          [undefined, "Alle"],
+          ["standard", "Standard"],
+          ["reverse_charge", "Reverse Charge"],
+          ["commercial", "Commercial"],
+        ] as const).map(([val, label]) => (
+          <Link
+            key={label}
+            href={val ? `/orders?type=${val}` : "/orders"}
+            className={`rounded-md px-2.5 py-1 text-xs font-medium ${
+              filterType === val || (!filterType && !val)
+                ? "bg-gray-900 text-white"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+          >
+            {label}
+          </Link>
+        ))}
       </div>
 
       {error && (
-        <div className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4">
+        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3">
           <p className="text-sm text-red-700">{error}</p>
         </div>
       )}
 
-      <div className="mt-6 overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
-        <table className="min-w-full divide-y divide-gray-200">
+      <div className="mt-4 overflow-hidden rounded-lg border border-gray-200 shadow-sm">
+        <table className="w-full table-fixed divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                Bestellung
+              <th className="w-[10%] px-3 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                Nr.
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th className="w-[22%] px-3 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                 Kunde
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th className="w-[14%] px-3 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                 Betrag
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th className="w-[10%] px-3 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                 Land
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                USt-IdNr.
+              <th className="w-[12%] px-3 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                Typ
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                Rechnungstyp
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th className="w-[14%] px-3 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                 Datum
               </th>
-              <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th className="w-[18%] px-3 py-2.5 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
                 Aktion
               </th>
             </tr>
@@ -165,8 +139,8 @@ export default async function OrdersPage({
             {filteredOrders.length === 0 ? (
               <tr>
                 <td
-                  colSpan={8}
-                  className="px-6 py-8 text-center text-sm text-gray-500"
+                  colSpan={7}
+                  className="px-3 py-6 text-center text-sm text-gray-500"
                 >
                   Keine Bestellungen gefunden.
                 </td>
@@ -178,8 +152,8 @@ export default async function OrdersPage({
                   : null;
                 const invoiceType = detectInvoiceType(order, taxNumber);
                 const country =
-                  order.billing_address?.country ||
-                  order.shipping_address?.country ||
+                  order.billing_address?.country_code ||
+                  order.shipping_address?.country_code ||
                   "\u2014";
                 const customerName =
                   order.billing_address?.name ||
@@ -189,37 +163,30 @@ export default async function OrdersPage({
 
                 return (
                   <tr key={order.id} className="hover:bg-gray-50">
-                    <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
+                    <td className="whitespace-nowrap px-3 py-2.5 text-sm font-medium text-gray-900">
                       {order.name}
                     </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
+                    <td className="truncate px-3 py-2.5 text-sm text-gray-600">
                       {customerName}
                     </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
+                    <td className="whitespace-nowrap px-3 py-2.5 text-sm text-gray-600">
                       {order.total_price} {order.currency}
                     </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
+                    <td className="whitespace-nowrap px-3 py-2.5 text-sm text-gray-600">
                       {country}
                     </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
-                      {taxNumber ? (
-                        <span className="font-mono text-xs">{taxNumber}</span>
-                      ) : (
-                        <span className="text-gray-300">\u2014</span>
-                      )}
-                    </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm">
+                    <td className="whitespace-nowrap px-3 py-2.5 text-sm">
                       <InvoiceTypeBadge type={invoiceType} />
                     </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
+                    <td className="whitespace-nowrap px-3 py-2.5 text-sm text-gray-600">
                       {new Date(order.created_at).toLocaleDateString("de-DE")}
                     </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-right text-sm">
+                    <td className="whitespace-nowrap px-3 py-2.5 text-right text-sm">
                       <Link
                         href={`/orders/${order.id}`}
-                        className="rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800 transition-colors"
+                        className="rounded-md bg-gray-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-gray-800 transition-colors"
                       >
-                        Rechnung erstellen
+                        Rechnung +
                       </Link>
                     </td>
                   </tr>
