@@ -1,4 +1,4 @@
-import { createServerComponentClient } from './supabase/server'
+import { createApiClient } from './supabase/api'
 
 export const EU_COUNTRIES = [
   'AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR',
@@ -7,7 +7,7 @@ export const EU_COUNTRIES = [
 ]
 
 export async function getShopifyToken(): Promise<string | null> {
-  const supabase = await createServerComponentClient()
+  const supabase = createApiClient()
   const { data, error } = await supabase
     .from('shopify_tokens')
     .select('access_token')

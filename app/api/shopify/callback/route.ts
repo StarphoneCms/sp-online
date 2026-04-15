@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerComponentClient } from '@/lib/supabase/server'
+import { createApiClient } from '@/lib/supabase/api'
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
 
   const { access_token } = await tokenRes.json()
 
-  const supabase = await createServerComponentClient()
+  const supabase = createApiClient()
   await supabase.from('shopify_tokens').upsert(
     { shop, access_token },
     { onConflict: 'shop' }

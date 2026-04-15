@@ -1,12 +1,12 @@
 import { NextRequest } from 'next/server'
-import { createServerComponentClient } from '@/lib/supabase/server'
+import { createApiClient } from '@/lib/supabase/api'
 
 export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
-  const supabase = await createServerComponentClient()
+  const supabase = createApiClient()
 
   const { error } = await supabase
     .from('shopify_invoices')

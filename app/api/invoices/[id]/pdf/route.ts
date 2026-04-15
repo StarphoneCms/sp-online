@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { jsPDF } from 'jspdf'
-import { createServerComponentClient } from '@/lib/supabase/server'
+import { createApiClient } from '@/lib/supabase/api'
 import { shopifyFetch, getPresentmentAmount, type ShopifyOrder } from '@/lib/shopify'
 import { LOGO_BASE64 } from '@/lib/logo'
 
@@ -25,7 +25,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
-  const supabase = await createServerComponentClient()
+  const supabase = createApiClient()
 
   const { data: invoice, error } = await supabase
     .from('shopify_invoices')
