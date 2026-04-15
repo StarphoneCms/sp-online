@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { type ShopifyOrder, type InvoiceType } from "@/lib/shopify";
+import { type ShopifyOrder, type InvoiceType, getShopAmount, getPresentmentCurrency } from "@/lib/shopify";
 import { createClient } from "@/lib/supabase/client";
 
 const VAT_REGEX = /^(AT|BE|BG|HR|CY|CZ|DK|EE|FI|FR|DE|GR|HU|IE|IT|LV|LT|LU|MT|NL|PL|PT|RO|SK|SI|ES|SE)[A-Z0-9]{2,13}$/;
@@ -38,6 +38,11 @@ export default function InvoiceForm({
   const vatValid = vatNormalized.length > 0 && isValidVatFormat(vatNormalized);
   const vatInvalid = vatTouched && vatNormalized.length > 0 && !vatValid;
 
+  // Always use EUR (shop currency) for invoices
+  const eurTotal = parseFloat(getShopAmount(order.total_price_set, order.total_price));
+  const presentmentCurrency = getPresentmentCurrency(order);
+  const isDifferentCurrency = presentmentCurrency !== "EUR";
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
@@ -61,8 +66,8 @@ export default function InvoiceForm({
         customer_name: customerName,
         customer_email: order.email,
         customer_vat: invoiceType === "reverse_charge" ? vatNormalized : null,
-        amount: parseFloat(order.total_price),
-        currency: order.currency,
+        amount: eurTotal,
+        currency: "EUR",
       })
       .select("id")
       .single();
@@ -241,27 +246,46 @@ export default function InvoiceForm({
                   Menge
                 </th>
                 <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">
-                  Preis
+                  Preis (EUR)
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
-              {order.line_items.map((item) => (
-                <tr key={item.id}>
-                  <td className="px-4 py-2 text-sm text-gray-900">
-                    {item.title}
-                  </td>
-                  <td className="px-4 py-2 text-sm text-gray-500">
-                    {item.sku || "\u2014"}
-                  </td>
-                  <td className="px-4 py-2 text-right text-sm text-gray-600">
-                    {item.quantity}
-                  </td>
-                  <td className="px-4 py-2 text-right text-sm text-gray-600">
-                    {item.price} {order.currency}
-                  </td>
-                </tr>
-              ))}
+              {order.line_items.map((item) => {
+                const eurPrice = getShopAmount(item.price_set, item.price);
+                return (
+                  <tr key={item.id}>
+                    <td className="px-4 py-2 text-sm text-gray-900">
+                      {item.title}
+                    </td>
+                    <td className="px-4 py-2 text-sm text-gray-500">
+                      {item.sku || "\u2014"}
+                    </td>
+                    <td className="px-4 py-2 text-right text-sm text-gray-600">
+                      {item.quantity}
+                    </td>
+                    <td className="px-4 py-2 text-right text-sm text-gray-600">
+                      {parseFloat(eurPrice).toFixed(2)} EUR
+                    </td>
+                  </tr>
+                );
+              })}
+              {order.shipping_lines?.map((shipping) => {
+                const eurShipping = getShopAmount(shipping.price_set, shipping.price);
+                return (
+                  <tr key={shipping.id} className="bg-gray-50">
+                    <td className="px-4 py-2 text-sm text-gray-600" colSpan={2}>
+                      Versand: {shipping.title}
+                    </td>
+                    <td className="px-4 py-2 text-right text-sm text-gray-600">
+                      1
+                    </td>
+                    <td className="px-4 py-2 text-right text-sm text-gray-600">
+                      {parseFloat(eurShipping).toFixed(2)} EUR
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
             <tfoot className="bg-gray-50">
               <tr>
@@ -272,12 +296,17 @@ export default function InvoiceForm({
                   Gesamt
                 </td>
                 <td className="px-4 py-2 text-right text-sm font-bold text-gray-900">
-                  {order.total_price} {order.currency}
+                  {eurTotal.toFixed(2)} EUR
                 </td>
               </tr>
             </tfoot>
           </table>
         </div>
+        {isDifferentCurrency && (
+          <p className="mt-2 text-xs text-gray-400">
+            Rechnung in EUR. Bestellung bezahlt in {presentmentCurrency}.
+          </p>
+        )}
       </div>
 
       <button

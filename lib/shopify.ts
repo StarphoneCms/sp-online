@@ -40,6 +40,11 @@ export async function shopifyFetch(endpoint: string) {
   return res.json()
 }
 
+export interface ShopifyMoneySet {
+  shop_money: { amount: string; currency_code: string }
+  presentment_money: { amount: string; currency_code: string }
+}
+
 export interface ShopifyOrder {
   id: number
   name: string
@@ -47,6 +52,9 @@ export interface ShopifyOrder {
   created_at: string
   total_price: string
   currency: string
+  total_price_set?: ShopifyMoneySet
+  subtotal_price?: string
+  subtotal_price_set?: ShopifyMoneySet
   billing_address?: {
     country_code: string
     company?: string
@@ -72,7 +80,14 @@ export interface ShopifyOrder {
     title: string
     quantity: number
     price: string
+    price_set?: ShopifyMoneySet
     sku: string
+  }[]
+  shipping_lines?: {
+    id: number
+    title: string
+    price: string
+    price_set?: ShopifyMoneySet
   }[]
   customer?: {
     id: number
@@ -82,6 +97,16 @@ export interface ShopifyOrder {
     tax_exemptions?: string[]
   }
   note_attributes?: { name: string; value: string }[]
+}
+
+/** Get EUR amount from a money set, falling back to the raw value */
+export function getShopAmount(set: ShopifyMoneySet | undefined, fallback: string): string {
+  return set?.shop_money?.amount ?? fallback
+}
+
+/** Get the presentment (customer-facing) currency code */
+export function getPresentmentCurrency(order: ShopifyOrder): string {
+  return order.total_price_set?.presentment_money?.currency_code ?? order.currency
 }
 
 export type InvoiceType = 'reverse_charge' | 'commercial' | 'standard'

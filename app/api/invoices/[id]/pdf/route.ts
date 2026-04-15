@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { jsPDF } from 'jspdf'
 import { createServerComponentClient } from '@/lib/supabase/server'
-import { shopifyFetch, type ShopifyOrder } from '@/lib/shopify'
+import { shopifyFetch, getShopAmount, type ShopifyOrder } from '@/lib/shopify'
 import { LOGO_BASE64 } from '@/lib/logo'
 
 // Colors
@@ -90,7 +90,7 @@ export async function GET(
   ]
   const metaRight = [
     ['Payment Due', fmtDate(dueDate)],
-    ['Currency', invoice.currency || 'EUR'],
+    ['Currency', 'EUR'],
     ['Terms', 'Net 14 days'],
   ]
 
@@ -193,38 +193,67 @@ export async function GET(
 
   y += rowH + 1
 
-  // Rows
+  // Rows - always use EUR (shop_money)
+  const cur = 'EUR'
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(7)
   const lineItems = order?.line_items || []
   let subtotal = 0
+  let rowIdx = 0
 
-  lineItems.forEach((item, i) => {
-    const lineTotal = item.quantity * parseFloat(item.price)
+  lineItems.forEach((item) => {
+    const eurPrice = parseFloat(getShopAmount(item.price_set, item.price))
+    const lineTotal = item.quantity * eurPrice
     subtotal += lineTotal
 
-    // Alternating background
-    if (i % 2 === 1) {
+    if (rowIdx % 2 === 1) {
       setFill(doc, LIGHT_GRAY)
       doc.rect(mL, y - 3.5, cW, rowH, 'F')
     }
 
     setColor(doc, GRAY)
-    doc.text(String(i + 1), c.num + 2, y)
+    doc.text(String(rowIdx + 1), c.num + 2, y)
     setColor(doc, DARK)
     const titleText = item.title.length > 55 ? item.title.substring(0, 52) + '...' : item.title
     doc.text(titleText, c.desc, y)
     setColor(doc, GRAY)
     doc.text(String(item.quantity), c.qty, y, { align: 'right' })
-    doc.text(`${parseFloat(item.price).toFixed(2)} ${invoice.currency}`, c.unit, y, { align: 'right' })
+    doc.text(`${eurPrice.toFixed(2)} ${cur}`, c.unit, y, { align: 'right' })
     doc.setFont('helvetica', 'bold')
     setColor(doc, DARK)
-    doc.text(`${lineTotal.toFixed(2)} ${invoice.currency}`, c.total, y, { align: 'right' })
+    doc.text(`${lineTotal.toFixed(2)} ${cur}`, c.total, y, { align: 'right' })
     doc.setFont('helvetica', 'normal')
     y += rowH
+    rowIdx++
   })
 
-  if (lineItems.length === 0) {
+  // Shipping lines
+  const shippingLines = order?.shipping_lines || []
+  shippingLines.forEach((shipping) => {
+    const eurShipping = parseFloat(getShopAmount(shipping.price_set, shipping.price))
+    subtotal += eurShipping
+
+    if (rowIdx % 2 === 1) {
+      setFill(doc, LIGHT_GRAY)
+      doc.rect(mL, y - 3.5, cW, rowH, 'F')
+    }
+
+    setColor(doc, GRAY)
+    doc.text(String(rowIdx + 1), c.num + 2, y)
+    setColor(doc, DARK)
+    doc.text(`Shipping: ${shipping.title}`, c.desc, y)
+    setColor(doc, GRAY)
+    doc.text('1', c.qty, y, { align: 'right' })
+    doc.text(`${eurShipping.toFixed(2)} ${cur}`, c.unit, y, { align: 'right' })
+    doc.setFont('helvetica', 'bold')
+    setColor(doc, DARK)
+    doc.text(`${eurShipping.toFixed(2)} ${cur}`, c.total, y, { align: 'right' })
+    doc.setFont('helvetica', 'normal')
+    y += rowH
+    rowIdx++
+  })
+
+  if (lineItems.length === 0 && shippingLines.length === 0) {
     setColor(doc, GRAY)
     doc.text('(Line items not available)', c.desc, y)
     subtotal = parseFloat(invoice.amount) || 0
@@ -266,13 +295,13 @@ export async function GET(
 
   doc.text('Subtotal', totalsX, y)
   setColor(doc, DARK)
-  doc.text(`${netAmount.toFixed(2)} ${invoice.currency}`, totalsValX, y, { align: 'right' })
+  doc.text(`${netAmount.toFixed(2)} ${cur}`, totalsValX, y, { align: 'right' })
 
   y += 5.5
   setColor(doc, GRAY)
   doc.text(vatLabel, totalsX, y)
   setColor(doc, DARK)
-  doc.text(`${vatAmount.toFixed(2)} ${invoice.currency}`, totalsValX, y, { align: 'right' })
+  doc.text(`${vatAmount.toFixed(2)} ${cur}`, totalsValX, y, { align: 'right' })
 
   y += 4
   doc.setDrawColor(DARK.r, DARK.g, DARK.b)
@@ -285,7 +314,7 @@ export async function GET(
   doc.setFont('helvetica', 'bold')
   setColor(doc, DARK)
   doc.text('TOTAL', totalsX, y)
-  doc.text(`${(parseFloat(invoice.amount) || subtotal).toFixed(2)} ${invoice.currency}`, totalsValX, y, { align: 'right' })
+  doc.text(`${(parseFloat(invoice.amount) || subtotal).toFixed(2)} ${cur}`, totalsValX, y, { align: 'right' })
 
   // ─── 6. LEGAL TEXT BOX ────────────────────────────────
   y += 14
@@ -298,7 +327,7 @@ export async function GET(
   } else if (invoice.invoice_type === 'commercial') {
     legalText =
       'VAT-exempt export delivery pursuant to \u00a74 No. 1a UStG. ' +
-      `Customs Value: ${(parseFloat(invoice.amount) || subtotal).toFixed(2)} ${invoice.currency}`
+      `Customs Value: ${(parseFloat(invoice.amount) || subtotal).toFixed(2)} ${cur}`
   } else {
     legalText = 'All prices include 19% VAT. Payment due within 14 days.'
   }
@@ -324,6 +353,15 @@ export async function GET(
     setColor(doc, GRAY)
     doc.text('HS Code: \u2014', mL, y)
     doc.text('Country of Origin: Germany (DE)', mL + 50, y)
+  }
+
+  // Currency note if order was in different currency
+  if (order && order.currency !== 'EUR') {
+    y += (invoice.invoice_type === 'commercial' ? 6 : legalBoxH + 4)
+    doc.setFontSize(6.5)
+    doc.setFont('helvetica', 'normal')
+    setColor(doc, GRAY)
+    doc.text(`Invoice issued in EUR. Order paid in ${order.currency}.`, mL, y)
   }
 
   // ─── 7. FOOTER ────────────────────────────────────────
