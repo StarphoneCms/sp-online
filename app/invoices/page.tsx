@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createServerComponentClient } from "@/lib/supabase/server";
+import InvoiceActions from "./InvoiceActions";
 
 const typeLabels: Record<string, string> = {
   standard: "Standard",
@@ -163,23 +164,10 @@ export default async function InvoicesPage() {
                     {new Date(invoice.created_at).toLocaleDateString("de-DE")}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2.5 text-right text-sm">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <a
-                        href={`/api/invoices/${invoice.id}/pdf`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="rounded-md bg-gray-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-gray-800 transition-colors"
-                      >
-                        PDF
-                      </a>
-                      <Link
-                        href={`/invoices/${invoice.id}/edit`}
-                        className="rounded-md border border-gray-300 bg-white px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 transition-colors"
-                        title="Bearbeiten"
-                      >
-                        &#9998;
-                      </Link>
-                    </div>
+                    <InvoiceActions
+                      invoiceId={invoice.id}
+                      invoiceNumber={invoice.invoice_number}
+                    />
                   </td>
                 </tr>
               ))}

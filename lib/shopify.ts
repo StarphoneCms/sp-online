@@ -99,9 +99,9 @@ export interface ShopifyOrder {
   note_attributes?: { name: string; value: string }[]
 }
 
-/** Get EUR amount from a money set, falling back to the raw value */
-export function getShopAmount(set: ShopifyMoneySet | undefined, fallback: string): string {
-  return set?.shop_money?.amount ?? fallback
+/** Get presentment (customer-facing) amount from a money set, falling back to raw value */
+export function getPresentmentAmount(set: ShopifyMoneySet | undefined, fallback: string): string {
+  return set?.presentment_money?.amount ?? fallback
 }
 
 /** Get the presentment (customer-facing) currency code */

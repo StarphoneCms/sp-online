@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { jsPDF } from 'jspdf'
 import { createServerComponentClient } from '@/lib/supabase/server'
-import { shopifyFetch, getShopAmount, type ShopifyOrder } from '@/lib/shopify'
+import { shopifyFetch, getPresentmentAmount, type ShopifyOrder } from '@/lib/shopify'
 import { LOGO_BASE64 } from '@/lib/logo'
 
 // Colors
@@ -90,7 +90,7 @@ export async function GET(
   ]
   const metaRight = [
     ['Payment Due', fmtDate(dueDate)],
-    ['Currency', 'EUR'],
+    ['Currency', invoice.currency || 'EUR'],
     ['Terms', 'Net 14 days'],
   ]
 
@@ -193,8 +193,8 @@ export async function GET(
 
   y += rowH + 1
 
-  // Rows - always use EUR (shop_money)
-  const cur = 'EUR'
+  // Rows - use invoice currency (presentment currency)
+  const cur = invoice.currency || 'EUR'
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(7)
   const lineItems = order?.line_items || []
@@ -202,7 +202,7 @@ export async function GET(
   let rowIdx = 0
 
   lineItems.forEach((item) => {
-    const eurPrice = parseFloat(getShopAmount(item.price_set, item.price))
+    const eurPrice = parseFloat(getPresentmentAmount(item.price_set, item.price))
     const lineTotal = item.quantity * eurPrice
     subtotal += lineTotal
 
@@ -230,7 +230,7 @@ export async function GET(
   // Shipping lines
   const shippingLines = order?.shipping_lines || []
   shippingLines.forEach((shipping) => {
-    const eurShipping = parseFloat(getShopAmount(shipping.price_set, shipping.price))
+    const eurShipping = parseFloat(getPresentmentAmount(shipping.price_set, shipping.price))
     subtotal += eurShipping
 
     if (rowIdx % 2 === 1) {
@@ -353,15 +353,6 @@ export async function GET(
     setColor(doc, GRAY)
     doc.text('HS Code: \u2014', mL, y)
     doc.text('Country of Origin: Germany (DE)', mL + 50, y)
-  }
-
-  // Currency note if order was in different currency
-  if (order && order.currency !== 'EUR') {
-    y += (invoice.invoice_type === 'commercial' ? 6 : legalBoxH + 4)
-    doc.setFontSize(6.5)
-    doc.setFont('helvetica', 'normal')
-    setColor(doc, GRAY)
-    doc.text(`Invoice issued in EUR. Order paid in ${order.currency}.`, mL, y)
   }
 
   // ─── 7. FOOTER ────────────────────────────────────────
