@@ -5,12 +5,12 @@ import { shopifyFetch, type ShopifyOrder } from '@/lib/shopify'
 import { LOGO_BASE64 } from '@/lib/logo'
 
 // Colors
-const TEAL = { r: 0, g: 180, b: 160 }
+const TEAL = { r: 59, g: 130, b: 246 }
 const DARK = { r: 17, g: 24, b: 39 }
 const GRAY = { r: 107, g: 114, b: 128 }
 const LIGHT_GRAY = { r: 243, g: 244, b: 246 }
 const WHITE = { r: 255, g: 255, b: 255 }
-const TEAL_BG = { r: 240, g: 253, b: 250 }
+const TEAL_BG = { r: 239, g: 246, b: 255 }
 
 function setColor(doc: jsPDF, c: { r: number; g: number; b: number }) {
   doc.setTextColor(c.r, c.g, c.b)
