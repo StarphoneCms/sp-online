@@ -67,6 +67,8 @@ export default function InvoiceForm({
         customer_vat: invoiceType === "reverse_charge" ? vatNormalized : null,
         amount: totalAmount,
         currency: cur,
+        hs_code: invoiceType === "commercial" ? hsCode || null : null,
+        country_of_origin: invoiceType === "commercial" ? countryOfOrigin || null : null,
       })
       .select("id")
       .single();

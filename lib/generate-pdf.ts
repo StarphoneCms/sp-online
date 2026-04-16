@@ -27,6 +27,8 @@ interface InvoiceRecord {
   amount: string
   currency: string
   created_at: string
+  hs_code?: string | null
+  country_of_origin?: string | null
 }
 
 export function generateInvoicePdf(
@@ -322,11 +324,43 @@ export function generateInvoicePdf(
   doc.text(legalText, mL + 5, y + 1, { maxWidth: cW - 10 })
 
   if (invoice.invoice_type === 'commercial') {
-    y += legalBoxH + 4
-    doc.setFontSize(7)
+    y += legalBoxH + 6
+
+    // Export Details box
+    doc.setFontSize(8)
+    doc.setFont('helvetica', 'bold')
+    setColor(doc, BLUE)
+    doc.text('EXPORT DETAILS', mL, y)
+
+    y += 5
+    doc.setFontSize(7.5)
     setColor(doc, GRAY)
-    doc.text('HS Code: \u2014', mL, y)
-    doc.text('Country of Origin: Germany (DE)', mL + 50, y)
+    doc.setFont('helvetica', 'normal')
+
+    const hsCode = invoice.hs_code || '\u2014'
+    const origin = invoice.country_of_origin || 'DE'
+    const customsVal = `${(parseFloat(invoice.amount) || subtotal).toFixed(2)} ${cur}`
+
+    doc.text('HS Code:', mL, y)
+    doc.setFont('helvetica', 'bold')
+    setColor(doc, DARK)
+    doc.text(hsCode, mL + 28, y)
+
+    y += 5
+    doc.setFont('helvetica', 'normal')
+    setColor(doc, GRAY)
+    doc.text('Country of Origin:', mL, y)
+    doc.setFont('helvetica', 'bold')
+    setColor(doc, DARK)
+    doc.text(origin, mL + 28, y)
+
+    y += 5
+    doc.setFont('helvetica', 'normal')
+    setColor(doc, GRAY)
+    doc.text('Customs Value:', mL, y)
+    doc.setFont('helvetica', 'bold')
+    setColor(doc, DARK)
+    doc.text(customsVal, mL + 28, y)
   }
 
   // ─── 7. FOOTER ────────────────────────────────────────
