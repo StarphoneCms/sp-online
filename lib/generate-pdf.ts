@@ -42,8 +42,6 @@ export function generateInvoicePdf(
   const cW = mR - mL
 
   const invoiceDate = new Date(invoice.created_at)
-  const dueDate = new Date(invoiceDate)
-  dueDate.setDate(dueDate.getDate() + 14)
   const fmtDate = (d: Date) => d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 
   // ─── 1. HEADER ─────────────────────────────────────────
@@ -76,9 +74,8 @@ export function generateInvoicePdf(
     ['Order Ref.', invoice.shopify_order_number],
   ]
   const metaRight = [
-    ['Payment Due', fmtDate(dueDate)],
+    ['Payment', 'Paid in full'],
     ['Currency', invoice.currency || 'EUR'],
-    ['Terms', 'Net 14 days'],
   ]
 
   metaLeft.forEach(([label, value], i) => {
