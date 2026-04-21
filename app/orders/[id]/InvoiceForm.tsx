@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { type ShopifyOrder, type InvoiceType, getPresentmentAmount, getPresentmentCurrency } from "@/lib/shopify";
 import { createClient } from "@/lib/supabase/client";
+import { roundMoney } from "@/lib/format";
 
 const VAT_REGEX = /^(AT|BE|BG|HR|CY|CZ|DK|EE|FI|FR|DE|GR|HU|IE|IT|LV|LT|LU|MT|NL|PL|PT|RO|SK|SI|ES|SE)[A-Z0-9]{2,13}$/;
 
@@ -40,7 +41,27 @@ export default function InvoiceForm({
 
   // Use presentment currency (what the customer paid in)
   const cur = getPresentmentCurrency(order);
-  const totalAmount = parseFloat(getPresentmentAmount(order.total_price_set, order.total_price));
+  const totalAmount = roundMoney(
+    parseFloat(getPresentmentAmount(order.total_price_set, order.total_price))
+  );
+
+  // Build line items snapshot from Shopify (so PDF and detail page can render them)
+  const builtLineItems = [
+    ...order.line_items.map((item) => ({
+      description: item.title,
+      quantity: item.quantity,
+      price: roundMoney(
+        parseFloat(getPresentmentAmount(item.price_set, item.price))
+      ),
+    })),
+    ...(order.shipping_lines || []).map((shipping) => ({
+      description: `Versand: ${shipping.title}`,
+      quantity: 1,
+      price: roundMoney(
+        parseFloat(getPresentmentAmount(shipping.price_set, shipping.price))
+      ),
+    })),
+  ];
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -55,6 +76,24 @@ export default function InvoiceForm({
     const supabase = createClient();
     const invoiceNumber = `RE-${order.name.replace("#", "")}-${Date.now()}`;
 
+    const taxRate = invoiceType === "standard" ? 19 : 0;
+    const taxAmount =
+      invoiceType === "standard"
+        ? roundMoney(totalAmount - totalAmount / 1.19)
+        : 0;
+    const subtotalForInvoice =
+      invoiceType === "standard" ? roundMoney(totalAmount / 1.19) : totalAmount;
+
+    const customerAddressParts = order.billing_address
+      ? [
+          order.billing_address.company,
+          order.billing_address.address1,
+          order.billing_address.address2,
+          `${order.billing_address.zip} ${order.billing_address.city}`,
+          order.billing_address.country,
+        ].filter(Boolean)
+      : [];
+
     const { data, error } = await supabase
       .from("shopify_invoices")
       .insert({
@@ -65,8 +104,15 @@ export default function InvoiceForm({
         customer_name: customerName,
         customer_email: order.email,
         customer_vat: invoiceType === "reverse_charge" ? vatNormalized : null,
+        customer_address: customerAddressParts.join("\n") || null,
+        line_items: builtLineItems,
+        subtotal: subtotalForInvoice,
+        shipping: 0,
+        tax_rate: taxRate,
+        tax_amount: taxAmount,
         amount: totalAmount,
         currency: cur,
+        is_manual: false,
         hs_code: invoiceType === "commercial" ? hsCode || null : null,
         country_of_origin: invoiceType === "commercial" ? countryOfOrigin || null : null,
       })

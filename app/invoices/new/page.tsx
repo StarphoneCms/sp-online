@@ -5,16 +5,22 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { type InvoiceType } from "@/lib/shopify";
+import { formatEUR, roundMoney } from "@/lib/format";
 
 interface LineItem {
   description: string;
   quantity: number;
-  unitPrice: number;
-  currency: string;
+  price: number;
 }
 
 const VAT_REGEX =
   /^(AT|BE|BG|HR|CY|CZ|DK|EE|FI|FR|DE|GR|HU|IE|IT|LV|LT|LU|MT|NL|PL|PT|RO|SK|SI|ES|SE)[A-Z0-9]{2,13}$/;
+
+const TAX_RATE_BY_TYPE: Record<InvoiceType, number> = {
+  standard: 19,
+  reverse_charge: 0,
+  commercial: 0,
+};
 
 export default function NewInvoicePage() {
   const router = useRouter();
@@ -27,28 +33,28 @@ export default function NewInvoicePage() {
   const [customerEmail, setCustomerEmail] = useState("");
   const [customerVat, setCustomerVat] = useState("");
   const [invoiceType, setInvoiceType] = useState<InvoiceType>("standard");
-  const [note, setNote] = useState("");
-  const [paymentTerms, setPaymentTerms] = useState("14");
-  const [currency, setCurrency] = useState("EUR");
+  const [notes, setNotes] = useState("");
+  const [shipping, setShipping] = useState(0);
 
   const [lineItems, setLineItems] = useState<LineItem[]>([
-    { description: "", quantity: 1, unitPrice: 0, currency: "EUR" },
+    { description: "", quantity: 1, price: 0 },
   ]);
 
+  const taxRate = TAX_RATE_BY_TYPE[invoiceType];
   const vatNormalized = customerVat.replace(/\s/g, "").toUpperCase();
   const vatValid = vatNormalized.length > 0 && VAT_REGEX.test(vatNormalized);
 
   function addLineItem() {
     setLineItems([
       ...lineItems,
-      { description: "", quantity: 1, unitPrice: 0, currency },
+      { description: "", quantity: 1, price: 0 },
     ]);
   }
 
   function addDiscount() {
     setLineItems([
       ...lineItems,
-      { description: "Rabatt", quantity: 1, unitPrice: 0, currency },
+      { description: "Rabatt", quantity: 1, price: 0 },
     ]);
   }
 
@@ -56,16 +62,21 @@ export default function NewInvoicePage() {
     setLineItems(lineItems.filter((_, i) => i !== index));
   }
 
-  function updateLineItem(index: number, field: keyof LineItem, value: string | number) {
+  function updateLineItem(
+    index: number,
+    field: keyof LineItem,
+    value: string | number
+  ) {
     const updated = [...lineItems];
     updated[index] = { ...updated[index], [field]: value };
     setLineItems(updated);
   }
 
-  const totalAmount = lineItems.reduce(
-    (sum, item) => sum + item.quantity * item.unitPrice,
-    0
+  const subtotal = roundMoney(
+    lineItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
   );
+  const taxAmount = roundMoney((subtotal * taxRate) / 100);
+  const total = roundMoney(subtotal + shipping + taxAmount);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -79,22 +90,37 @@ export default function NewInvoicePage() {
     const { data, error } = await supabase
       .from("shopify_invoices")
       .insert({
-        shopify_order_id: "manual",
-        shopify_order_number: "Manuell",
         invoice_number: invoiceNumber,
         invoice_type: invoiceType,
         customer_name: customerCompany || customerName,
-        customer_email: customerEmail,
+        customer_email: customerEmail || null,
         customer_vat: invoiceType === "reverse_charge" ? vatNormalized : null,
-        amount: totalAmount,
-        currency,
+        customer_address:
+          [customerAddress, customerCountry].filter(Boolean).join(", ") || null,
+        notes: notes || null,
+        line_items: lineItems.map((it) => ({
+          description: it.description,
+          quantity: it.quantity,
+          price: roundMoney(it.price),
+        })),
+        subtotal,
+        shipping: roundMoney(shipping),
+        tax_rate: taxRate,
+        tax_amount: taxAmount,
+        amount: total,
+        currency: "EUR",
+        is_manual: true,
+        shopify_order_id: null,
+        shopify_order_number: "Manuell",
       })
       .select("id")
       .single();
 
     setSaving(false);
     if (error || !data) {
-      alert("Fehler beim Speichern: " + (error?.message || "Unbekannter Fehler"));
+      alert(
+        "Fehler beim Speichern: " + (error?.message || "Unbekannter Fehler")
+      );
     } else {
       router.push(`/invoices/${data.id}`);
     }
@@ -122,7 +148,9 @@ export default function NewInvoicePage() {
           <h2 className="text-sm font-semibold text-gray-700 mb-3">Kunde</h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="block text-xs font-medium text-gray-500">Name *</label>
+              <label className="block text-xs font-medium text-gray-500">
+                Name *
+              </label>
               <input
                 type="text"
                 required
@@ -132,7 +160,9 @@ export default function NewInvoicePage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500">Firma</label>
+              <label className="block text-xs font-medium text-gray-500">
+                Firma
+              </label>
               <input
                 type="text"
                 value={customerCompany}
@@ -141,7 +171,9 @@ export default function NewInvoicePage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500">Adresse</label>
+              <label className="block text-xs font-medium text-gray-500">
+                Adresse
+              </label>
               <input
                 type="text"
                 value={customerAddress}
@@ -151,7 +183,9 @@ export default function NewInvoicePage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500">Land</label>
+              <label className="block text-xs font-medium text-gray-500">
+                Land
+              </label>
               <input
                 type="text"
                 value={customerCountry}
@@ -161,7 +195,9 @@ export default function NewInvoicePage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500">E-Mail</label>
+              <label className="block text-xs font-medium text-gray-500">
+                E-Mail
+              </label>
               <input
                 type="email"
                 value={customerEmail}
@@ -186,43 +222,32 @@ export default function NewInvoicePage() {
         </div>
 
         {/* Invoice type */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className="block text-xs font-medium text-gray-500">Rechnungstyp</label>
+            <label className="block text-xs font-medium text-gray-500">
+              Rechnungstyp
+            </label>
             <select
               value={invoiceType}
               onChange={(e) => setInvoiceType(e.target.value as InvoiceType)}
               className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
             >
               <option value="standard">Standard (19% MwSt.)</option>
-              <option value="reverse_charge">Reverse Charge</option>
-              <option value="commercial">Commercial Invoice</option>
+              <option value="reverse_charge">Reverse Charge (0%)</option>
+              <option value="commercial">Commercial Invoice (0%)</option>
             </select>
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500">
-              Zahlungsziel (Tage)
+              Versandkosten (EUR)
             </label>
             <input
               type="number"
-              value={paymentTerms}
-              onChange={(e) => setPaymentTerms(e.target.value)}
-              min={0}
+              step={0.01}
+              value={shipping}
+              onChange={(e) => setShipping(parseFloat(e.target.value) || 0)}
               className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
             />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500">Währung</label>
-            <select
-              value={currency}
-              onChange={(e) => setCurrency(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
-            >
-              <option value="EUR">EUR</option>
-              <option value="USD">USD</option>
-              <option value="GBP">GBP</option>
-              <option value="CHF">CHF</option>
-            </select>
           </div>
         </div>
 
@@ -236,14 +261,14 @@ export default function NewInvoicePage() {
                 onClick={addLineItem}
                 className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
               >
-                + Position hinzufügen
+                + Position
               </button>
               <button
                 type="button"
                 onClick={addDiscount}
                 className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100 transition-colors"
               >
-                + Rabatt hinzufügen
+                + Rabatt
               </button>
             </div>
           </div>
@@ -260,7 +285,7 @@ export default function NewInvoicePage() {
                   <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 w-28">
                     Einzelpreis
                   </th>
-                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 w-28">
+                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 w-32">
                     Gesamt
                   </th>
                   <th className="px-4 py-2 w-10" />
@@ -268,16 +293,21 @@ export default function NewInvoicePage() {
               </thead>
               <tbody className="divide-y divide-gray-200 bg-white">
                 {lineItems.map((item, i) => {
-                  const lineTotal = item.quantity * item.unitPrice;
+                  const lineTotal = item.quantity * item.price;
                   const isNegative = lineTotal < 0;
                   return (
-                    <tr key={i} className={isNegative ? "bg-amber-50/40" : undefined}>
+                    <tr
+                      key={i}
+                      className={isNegative ? "bg-red-50/40" : undefined}
+                    >
                       <td className="px-4 py-2">
                         <input
                           type="text"
                           required
                           value={item.description}
-                          onChange={(e) => updateLineItem(i, "description", e.target.value)}
+                          onChange={(e) =>
+                            updateLineItem(i, "description", e.target.value)
+                          }
                           placeholder="Artikel / Dienstleistung"
                           className="w-full rounded border border-gray-200 px-2 py-1 text-sm focus:border-gray-400 focus:outline-none"
                         />
@@ -286,9 +316,15 @@ export default function NewInvoicePage() {
                         <input
                           type="number"
                           required
-                          min={1}
+                          step={1}
                           value={item.quantity}
-                          onChange={(e) => updateLineItem(i, "quantity", parseInt(e.target.value) || 0)}
+                          onChange={(e) =>
+                            updateLineItem(
+                              i,
+                              "quantity",
+                              parseInt(e.target.value) || 0
+                            )
+                          }
                           className="w-full rounded border border-gray-200 px-2 py-1 text-sm text-right focus:border-gray-400 focus:outline-none"
                         />
                       </td>
@@ -297,21 +333,27 @@ export default function NewInvoicePage() {
                           type="number"
                           required
                           step={0.01}
-                          value={item.unitPrice}
-                          onChange={(e) => updateLineItem(i, "unitPrice", parseFloat(e.target.value) || 0)}
+                          value={item.price}
+                          onChange={(e) =>
+                            updateLineItem(
+                              i,
+                              "price",
+                              parseFloat(e.target.value) || 0
+                            )
+                          }
                           className={`w-full rounded border px-2 py-1 text-sm text-right focus:outline-none ${
                             isNegative
-                              ? "border-amber-300 text-amber-700 focus:border-amber-500"
+                              ? "border-red-300 text-red-700 focus:border-red-500"
                               : "border-gray-200 focus:border-gray-400"
                           }`}
                         />
                       </td>
                       <td
                         className={`px-4 py-2 text-right text-sm font-medium ${
-                          isNegative ? "text-amber-700" : "text-gray-900"
+                          isNegative ? "text-red-700" : "text-gray-900"
                         }`}
                       >
-                        {lineTotal.toFixed(2)} {currency}
+                        {formatEUR(lineTotal)}
                       </td>
                       <td className="px-4 py-2 text-center">
                         {lineItems.length > 1 && (
@@ -328,13 +370,56 @@ export default function NewInvoicePage() {
                   );
                 })}
               </tbody>
-              <tfoot className="bg-gray-50">
+              <tfoot className="bg-gray-50 text-sm">
                 <tr>
-                  <td colSpan={3} className="px-4 py-2 text-right text-sm font-medium text-gray-700">
+                  <td
+                    colSpan={3}
+                    className="px-4 py-2 text-right font-medium text-gray-700"
+                  >
+                    Zwischensumme
+                  </td>
+                  <td className="px-4 py-2 text-right text-gray-900">
+                    {formatEUR(subtotal)}
+                  </td>
+                  <td />
+                </tr>
+                {shipping !== 0 && (
+                  <tr>
+                    <td
+                      colSpan={3}
+                      className="px-4 py-2 text-right font-medium text-gray-700"
+                    >
+                      Versand
+                    </td>
+                    <td className="px-4 py-2 text-right text-gray-900">
+                      {formatEUR(shipping)}
+                    </td>
+                    <td />
+                  </tr>
+                )}
+                {taxRate > 0 && (
+                  <tr>
+                    <td
+                      colSpan={3}
+                      className="px-4 py-2 text-right font-medium text-gray-700"
+                    >
+                      MwSt. ({taxRate}%)
+                    </td>
+                    <td className="px-4 py-2 text-right text-gray-900">
+                      {formatEUR(taxAmount)}
+                    </td>
+                    <td />
+                  </tr>
+                )}
+                <tr className="border-t border-gray-300">
+                  <td
+                    colSpan={3}
+                    className="px-4 py-2 text-right font-bold text-gray-900"
+                  >
                     Gesamt
                   </td>
-                  <td className="px-4 py-2 text-right text-sm font-bold text-gray-900">
-                    {totalAmount.toFixed(2)} {currency}
+                  <td className="px-4 py-2 text-right font-bold text-gray-900">
+                    {formatEUR(total)}
                   </td>
                   <td />
                 </tr>
@@ -343,12 +428,14 @@ export default function NewInvoicePage() {
           </div>
         </div>
 
-        {/* Note */}
+        {/* Notes */}
         <div>
-          <label className="block text-xs font-medium text-gray-500">Notiz</label>
+          <label className="block text-xs font-medium text-gray-500">
+            Notiz
+          </label>
           <textarea
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
             rows={3}
             placeholder="Optionale Anmerkung zur Rechnung"
             className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"

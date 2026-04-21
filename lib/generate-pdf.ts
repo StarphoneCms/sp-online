@@ -8,7 +8,7 @@ const GRAY = { r: 107, g: 114, b: 128 }
 const LIGHT_GRAY = { r: 243, g: 244, b: 246 }
 const WHITE = { r: 255, g: 255, b: 255 }
 const BLUE_BG = { r: 239, g: 246, b: 255 }
-const AMBER = { r: 180, g: 83, b: 9 }
+const RED = { r: 185, g: 28, b: 28 }
 
 type Color = { r: number; g: number; b: number }
 
@@ -19,17 +19,48 @@ function setFill(doc: jsPDF, c: Color) {
   doc.setFillColor(c.r, c.g, c.b)
 }
 
+// Format as "1.234,56 €" — German locale via Intl
+function formatEUR(value: number): string {
+  return new Intl.NumberFormat('de-DE', {
+    style: 'currency',
+    currency: 'EUR',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value)
+}
+
+interface SavedLineItem {
+  description: string
+  quantity: number
+  price: number
+}
+
 interface InvoiceRecord {
   invoice_number: string
-  shopify_order_number: string
+  shopify_order_number: string | null
   invoice_type: string
   customer_name: string | null
+  customer_email: string | null
   customer_vat: string | null
-  amount: string
-  currency: string
+  customer_address: string | null
+  amount: string | number
+  currency: string | null
   created_at: string
   hs_code?: string | null
   country_of_origin?: string | null
+  line_items?: SavedLineItem[] | null
+  subtotal?: string | number | null
+  shipping?: string | number | null
+  tax_rate?: string | number | null
+  tax_amount?: string | number | null
+  is_manual?: boolean | null
+  notes?: string | null
+}
+
+function num(v: string | number | null | undefined, fallback = 0): number {
+  if (v == null) return fallback
+  const n = typeof v === 'string' ? parseFloat(v) : v
+  return isNaN(n) ? fallback : n
 }
 
 export function generateInvoicePdf(
@@ -43,7 +74,8 @@ export function generateInvoicePdf(
   const cW = mR - mL
 
   const invoiceDate = new Date(invoice.created_at)
-  const fmtDate = (d: Date) => d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+  const fmtDate = (d: Date) =>
+    d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 
   // ─── 1. HEADER ─────────────────────────────────────────
   doc.addImage(`data:image/jpeg;base64,${LOGO_BASE64}`, 'JPEG', mL, 10, 50, 12.5)
@@ -69,14 +101,18 @@ export function generateInvoicePdf(
   doc.setFont('helvetica', 'normal')
   setColor(doc, GRAY)
 
+  const orderRefValue = invoice.is_manual
+    ? 'Manuell'
+    : invoice.shopify_order_number || '—'
+
   const metaLeft = [
     ['Invoice No.', invoice.invoice_number],
     ['Date', fmtDate(invoiceDate)],
-    ['Order Ref.', invoice.shopify_order_number],
+    ['Order Ref.', orderRefValue],
   ]
   const metaRight = [
     ['Payment', 'Paid in full'],
-    ['Currency', invoice.currency || 'EUR'],
+    ['Currency', 'EUR'],
   ]
 
   metaLeft.forEach(([label, value], i) => {
@@ -125,13 +161,19 @@ export function generateInvoicePdf(
   doc.setFontSize(8)
   doc.setFont('helvetica', 'bold')
   setColor(doc, DARK)
-  doc.text(invoice.customer_name || '\u2014', toX, y + 5)
+  doc.text(invoice.customer_name || '—', toX, y + 5)
 
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(7.5)
   setColor(doc, GRAY)
   let toY = y + 9.5
-  if (order?.billing_address) {
+  if (invoice.customer_address) {
+    const lines = invoice.customer_address.split(/[\n,]/).map((s) => s.trim()).filter(Boolean)
+    lines.forEach((line) => {
+      doc.text(line, toX, toY)
+      toY += 4
+    })
+  } else if (order?.billing_address) {
     const a = order.billing_address
     if (a.company) {
       doc.text(a.company, toX, toY)
@@ -173,71 +215,134 @@ export function generateInvoicePdf(
 
   y += rowH + 1
 
-  const cur = invoice.currency || 'EUR'
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(7)
-  const lineItems = order?.line_items || []
+
   let subtotal = 0
   let rowIdx = 0
 
-  lineItems.forEach((item) => {
-    const price = parseFloat(getPresentmentAmount(item.price_set, item.price))
-    const lineTotal = item.quantity * price
-    subtotal += lineTotal
+  const savedItems = Array.isArray(invoice.line_items) ? invoice.line_items : []
+  const useSaved = savedItems.length > 0
 
+  if (useSaved) {
+    savedItems.forEach((item) => {
+      const price = num(item.price)
+      const qty = num(item.quantity, 1)
+      const lineTotal = price * qty
+      subtotal += lineTotal
+
+      if (rowIdx % 2 === 1) {
+        setFill(doc, LIGHT_GRAY)
+        doc.rect(mL, y - 3.5, cW, rowH, 'F')
+      }
+
+      const negative = lineTotal < 0
+      setColor(doc, GRAY)
+      doc.text(String(rowIdx + 1), c.num + 2, y)
+      setColor(doc, negative ? RED : DARK)
+      const titleText =
+        item.description.length > 55
+          ? item.description.substring(0, 52) + '...'
+          : item.description
+      doc.text(titleText, c.desc, y)
+      setColor(doc, GRAY)
+      doc.text(String(qty), c.qty, y, { align: 'right' })
+      setColor(doc, negative ? RED : GRAY)
+      doc.text(formatEUR(price), c.unit, y, { align: 'right' })
+      doc.setFont('helvetica', 'bold')
+      setColor(doc, negative ? RED : DARK)
+      doc.text(formatEUR(lineTotal), c.total, y, { align: 'right' })
+      doc.setFont('helvetica', 'normal')
+      y += rowH
+      rowIdx++
+    })
+  } else {
+    // Fallback: render Shopify line items
+    const shopifyLineItems = order?.line_items || []
+    shopifyLineItems.forEach((item) => {
+      const price = parseFloat(getPresentmentAmount(item.price_set, item.price))
+      const lineTotal = item.quantity * price
+      subtotal += lineTotal
+
+      if (rowIdx % 2 === 1) {
+        setFill(doc, LIGHT_GRAY)
+        doc.rect(mL, y - 3.5, cW, rowH, 'F')
+      }
+
+      const negative = lineTotal < 0
+      setColor(doc, GRAY)
+      doc.text(String(rowIdx + 1), c.num + 2, y)
+      setColor(doc, negative ? RED : DARK)
+      const titleText =
+        item.title.length > 55 ? item.title.substring(0, 52) + '...' : item.title
+      doc.text(titleText, c.desc, y)
+      setColor(doc, GRAY)
+      doc.text(String(item.quantity), c.qty, y, { align: 'right' })
+      setColor(doc, negative ? RED : GRAY)
+      doc.text(formatEUR(price), c.unit, y, { align: 'right' })
+      doc.setFont('helvetica', 'bold')
+      setColor(doc, negative ? RED : DARK)
+      doc.text(formatEUR(lineTotal), c.total, y, { align: 'right' })
+      doc.setFont('helvetica', 'normal')
+      y += rowH
+      rowIdx++
+    })
+
+    const shippingLines = order?.shipping_lines || []
+    shippingLines.forEach((shipping) => {
+      const shippingPrice = parseFloat(
+        getPresentmentAmount(shipping.price_set, shipping.price)
+      )
+      subtotal += shippingPrice
+
+      if (rowIdx % 2 === 1) {
+        setFill(doc, LIGHT_GRAY)
+        doc.rect(mL, y - 3.5, cW, rowH, 'F')
+      }
+
+      setColor(doc, GRAY)
+      doc.text(String(rowIdx + 1), c.num + 2, y)
+      setColor(doc, DARK)
+      doc.text(`Shipping: ${shipping.title}`, c.desc, y)
+      setColor(doc, GRAY)
+      doc.text('1', c.qty, y, { align: 'right' })
+      doc.text(formatEUR(shippingPrice), c.unit, y, { align: 'right' })
+      doc.setFont('helvetica', 'bold')
+      setColor(doc, DARK)
+      doc.text(formatEUR(shippingPrice), c.total, y, { align: 'right' })
+      doc.setFont('helvetica', 'normal')
+      y += rowH
+      rowIdx++
+    })
+
+    if (rowIdx === 0) {
+      setColor(doc, GRAY)
+      doc.text('(Line items not available)', c.desc, y)
+      subtotal = num(invoice.amount)
+      y += rowH
+    }
+  }
+
+  // Saved shipping (manual / future)
+  const savedShipping = num(invoice.shipping, 0)
+  if (useSaved && savedShipping !== 0) {
     if (rowIdx % 2 === 1) {
       setFill(doc, LIGHT_GRAY)
       doc.rect(mL, y - 3.5, cW, rowH, 'F')
     }
-
-    const negative = lineTotal < 0
-    setColor(doc, GRAY)
-    doc.text(String(rowIdx + 1), c.num + 2, y)
-    setColor(doc, negative ? AMBER : DARK)
-    const titleText = item.title.length > 55 ? item.title.substring(0, 52) + '...' : item.title
-    doc.text(titleText, c.desc, y)
-    setColor(doc, GRAY)
-    doc.text(String(item.quantity), c.qty, y, { align: 'right' })
-    setColor(doc, negative ? AMBER : GRAY)
-    doc.text(`${price.toFixed(2)} ${cur}`, c.unit, y, { align: 'right' })
-    doc.setFont('helvetica', 'bold')
-    setColor(doc, negative ? AMBER : DARK)
-    doc.text(`${lineTotal.toFixed(2)} ${cur}`, c.total, y, { align: 'right' })
-    doc.setFont('helvetica', 'normal')
-    y += rowH
-    rowIdx++
-  })
-
-  const shippingLines = order?.shipping_lines || []
-  shippingLines.forEach((shipping) => {
-    const shippingPrice = parseFloat(getPresentmentAmount(shipping.price_set, shipping.price))
-    subtotal += shippingPrice
-
-    if (rowIdx % 2 === 1) {
-      setFill(doc, LIGHT_GRAY)
-      doc.rect(mL, y - 3.5, cW, rowH, 'F')
-    }
-
     setColor(doc, GRAY)
     doc.text(String(rowIdx + 1), c.num + 2, y)
     setColor(doc, DARK)
-    doc.text(`Shipping: ${shipping.title}`, c.desc, y)
+    doc.text('Versand', c.desc, y)
     setColor(doc, GRAY)
     doc.text('1', c.qty, y, { align: 'right' })
-    doc.text(`${shippingPrice.toFixed(2)} ${cur}`, c.unit, y, { align: 'right' })
+    doc.text(formatEUR(savedShipping), c.unit, y, { align: 'right' })
     doc.setFont('helvetica', 'bold')
     setColor(doc, DARK)
-    doc.text(`${shippingPrice.toFixed(2)} ${cur}`, c.total, y, { align: 'right' })
+    doc.text(formatEUR(savedShipping), c.total, y, { align: 'right' })
     doc.setFont('helvetica', 'normal')
     y += rowH
     rowIdx++
-  })
-
-  if (lineItems.length === 0 && shippingLines.length === 0) {
-    setColor(doc, GRAY)
-    doc.text('(Line items not available)', c.desc, y)
-    subtotal = parseFloat(invoice.amount) || 0
-    y += rowH
   }
 
   doc.setDrawColor(BLUE.r, BLUE.g, BLUE.b)
@@ -254,33 +359,51 @@ export function generateInvoicePdf(
   doc.setFont('helvetica', 'normal')
   setColor(doc, GRAY)
 
-  let vatLabel: string
-  let vatAmount: number
-  let netAmount: number
+  const totalAmount = num(invoice.amount)
+  const savedSubtotal = useSaved ? num(invoice.subtotal, subtotal + savedShipping) : null
+  const savedTaxAmount = num(invoice.tax_amount, 0)
+  const taxRate = num(invoice.tax_rate, invoice.invoice_type === 'standard' ? 19 : 0)
 
-  if (invoice.invoice_type === 'standard') {
-    netAmount = subtotal / 1.19
-    vatAmount = subtotal - netAmount
-    vatLabel = 'VAT (19%)'
-  } else if (invoice.invoice_type === 'reverse_charge') {
-    netAmount = subtotal
-    vatAmount = 0
-    vatLabel = 'VAT (0% Reverse Charge)'
+  // Determine displayed values
+  let netDisplay: number
+  let taxDisplay: number
+  let vatLabel: string
+
+  if (useSaved) {
+    netDisplay = savedSubtotal! + (savedShipping || 0)
+    taxDisplay = savedTaxAmount
+    if (invoice.invoice_type === 'standard') {
+      vatLabel = `VAT (${taxRate}%)`
+    } else if (invoice.invoice_type === 'reverse_charge') {
+      vatLabel = 'VAT (0% Reverse Charge)'
+    } else {
+      vatLabel = 'VAT (0% Export)'
+    }
   } else {
-    netAmount = subtotal
-    vatAmount = 0
-    vatLabel = 'VAT (0% Export)'
+    if (invoice.invoice_type === 'standard') {
+      netDisplay = subtotal / 1.19
+      taxDisplay = subtotal - netDisplay
+      vatLabel = 'VAT (19%)'
+    } else if (invoice.invoice_type === 'reverse_charge') {
+      netDisplay = subtotal
+      taxDisplay = 0
+      vatLabel = 'VAT (0% Reverse Charge)'
+    } else {
+      netDisplay = subtotal
+      taxDisplay = 0
+      vatLabel = 'VAT (0% Export)'
+    }
   }
 
   doc.text('Subtotal', totalsX, y)
   setColor(doc, DARK)
-  doc.text(`${netAmount.toFixed(2)} ${cur}`, totalsValX, y, { align: 'right' })
+  doc.text(formatEUR(netDisplay), totalsValX, y, { align: 'right' })
 
   y += 5.5
   setColor(doc, GRAY)
   doc.text(vatLabel, totalsX, y)
   setColor(doc, DARK)
-  doc.text(`${vatAmount.toFixed(2)} ${cur}`, totalsValX, y, { align: 'right' })
+  doc.text(formatEUR(taxDisplay), totalsValX, y, { align: 'right' })
 
   y += 4
   doc.setDrawColor(DARK.r, DARK.g, DARK.b)
@@ -293,7 +416,7 @@ export function generateInvoicePdf(
   doc.setFont('helvetica', 'bold')
   setColor(doc, DARK)
   doc.text('TOTAL', totalsX, y)
-  doc.text(`${(parseFloat(invoice.amount) || subtotal).toFixed(2)} ${cur}`, totalsValX, y, { align: 'right' })
+  doc.text(formatEUR(totalAmount || subtotal), totalsValX, y, { align: 'right' })
 
   // ─── 6. LEGAL TEXT BOX ────────────────────────────────
   y += 14
@@ -302,11 +425,11 @@ export function generateInvoicePdf(
   if (invoice.invoice_type === 'reverse_charge') {
     legalText =
       'Tax liability transfers to the recipient pursuant to Art. 196 EU VAT Directive / ' +
-      `\u00a713b UStG (Reverse Charge). Customer VAT ID: ${invoice.customer_vat || '\u2014'}`
+      `§13b UStG (Reverse Charge). Customer VAT ID: ${invoice.customer_vat || '—'}`
   } else if (invoice.invoice_type === 'commercial') {
     legalText =
-      'VAT-exempt export delivery pursuant to \u00a74 No. 1a UStG. ' +
-      `Customs Value: ${(parseFloat(invoice.amount) || subtotal).toFixed(2)} ${cur}`
+      'VAT-exempt export delivery pursuant to §4 No. 1a UStG. ' +
+      `Customs Value: ${formatEUR(totalAmount || subtotal)}`
   } else {
     legalText = 'All prices include 19% VAT. Payment due within 14 days.'
   }
@@ -326,7 +449,6 @@ export function generateInvoicePdf(
   if (invoice.invoice_type === 'commercial') {
     y += legalBoxH + 6
 
-    // Export Details box
     doc.setFontSize(8)
     doc.setFont('helvetica', 'bold')
     setColor(doc, BLUE)
@@ -337,9 +459,8 @@ export function generateInvoicePdf(
     setColor(doc, GRAY)
     doc.setFont('helvetica', 'normal')
 
-    const hsCode = invoice.hs_code || '\u2014'
+    const hsCode = invoice.hs_code || '—'
     const origin = invoice.country_of_origin || 'DE'
-    const customsVal = `${(parseFloat(invoice.amount) || subtotal).toFixed(2)} ${cur}`
 
     doc.text('HS Code:', mL, y)
     doc.setFont('helvetica', 'bold')
@@ -360,7 +481,7 @@ export function generateInvoicePdf(
     doc.text('Customs Value:', mL, y)
     doc.setFont('helvetica', 'bold')
     setColor(doc, DARK)
-    doc.text(customsVal, mL + 28, y)
+    doc.text(formatEUR(totalAmount || subtotal), mL + 28, y)
   }
 
   // ─── 7. FOOTER ────────────────────────────────────────

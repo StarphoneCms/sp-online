@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createServerComponentClient } from "@/lib/supabase/server";
 import { shopifyFetch, type ShopifyOrder } from "@/lib/shopify";
+import { formatEUR } from "@/lib/format";
 import SendEmailButton from "./SendEmailButton";
 
 const typeLabels: Record<string, string> = {
@@ -13,6 +14,12 @@ const typeStyles: Record<string, string> = {
   reverse_charge: "bg-purple-100 text-purple-800",
   commercial: "bg-orange-100 text-orange-800",
 };
+
+interface SavedLineItem {
+  description: string;
+  quantity: number;
+  price: number;
+}
 
 export default async function InvoiceDetailPage({
   params,
@@ -44,12 +51,21 @@ export default async function InvoiceDetailPage({
     );
   }
 
+  const savedLineItems: SavedLineItem[] = Array.isArray(invoice.line_items)
+    ? invoice.line_items
+    : [];
+  const hasSavedLineItems = savedLineItems.length > 0;
+
   let order: ShopifyOrder | null = null;
-  try {
-    const data = await shopifyFetch(`orders/${invoice.shopify_order_id}.json`);
-    order = data.order;
-  } catch {
-    // Order may no longer exist
+  if (!invoice.is_manual && invoice.shopify_order_id) {
+    try {
+      const data = await shopifyFetch(
+        `orders/${invoice.shopify_order_id}.json`
+      );
+      order = data.order;
+    } catch {
+      // Order may no longer exist
+    }
   }
 
   return (
@@ -67,7 +83,10 @@ export default async function InvoiceDetailPage({
             {invoice.invoice_number}
           </h1>
           <p className="mt-1 text-sm text-gray-500">
-            Bestellung {invoice.shopify_order_number} &middot;{" "}
+            {invoice.is_manual
+              ? "Manuelle Rechnung"
+              : `Bestellung ${invoice.shopify_order_number}`}{" "}
+            &middot;{" "}
             {new Date(invoice.created_at).toLocaleDateString("de-DE")}
           </p>
         </div>
@@ -119,14 +138,25 @@ export default async function InvoiceDetailPage({
               USt-IdNr.: {invoice.customer_vat}
             </p>
           )}
-          {order?.billing_address && (
+          {invoice.customer_address && (
+            <p className="mt-3 text-sm text-gray-500 leading-relaxed whitespace-pre-line">
+              {invoice.customer_address}
+            </p>
+          )}
+          {!invoice.customer_address && order?.billing_address && (
             <div className="mt-3 text-sm text-gray-500 leading-relaxed">
               {order.billing_address.company && (
-                <>{order.billing_address.company}<br /></>
+                <>
+                  {order.billing_address.company}
+                  <br />
+                </>
               )}
               {order.billing_address.address1}
               {order.billing_address.address2 && (
-                <><br />{order.billing_address.address2}</>
+                <>
+                  <br />
+                  {order.billing_address.address2}
+                </>
               )}
               <br />
               {order.billing_address.zip} {order.billing_address.city}
@@ -140,9 +170,33 @@ export default async function InvoiceDetailPage({
             Betrag
           </h3>
           <p className="mt-3 text-3xl font-bold text-gray-900">
-            {invoice.amount} {invoice.currency}
+            {formatEUR(invoice.amount)}
           </p>
           <div className="mt-4 space-y-1 text-sm text-gray-500">
+            {invoice.subtotal != null && (
+              <div className="flex justify-between">
+                <span>Zwischensumme</span>
+                <span className="font-medium text-gray-700">
+                  {formatEUR(invoice.subtotal)}
+                </span>
+              </div>
+            )}
+            {invoice.shipping != null && parseFloat(invoice.shipping) !== 0 && (
+              <div className="flex justify-between">
+                <span>Versand</span>
+                <span className="font-medium text-gray-700">
+                  {formatEUR(invoice.shipping)}
+                </span>
+              </div>
+            )}
+            {invoice.tax_amount != null && parseFloat(invoice.tax_amount) !== 0 && (
+              <div className="flex justify-between">
+                <span>MwSt. ({invoice.tax_rate ?? 0}%)</span>
+                <span className="font-medium text-gray-700">
+                  {formatEUR(invoice.tax_amount)}
+                </span>
+              </div>
+            )}
             <div className="flex justify-between">
               <span>Rechnungstyp</span>
               <span className="font-medium text-gray-700">
@@ -159,7 +213,123 @@ export default async function InvoiceDetailPage({
         </div>
       </div>
 
-      {order && order.line_items.length > 0 && (
+      {hasSavedLineItems && (
+        <div className="mt-8">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">
+            Positionen
+          </h3>
+          <div className="overflow-hidden rounded-lg border border-gray-200 shadow-sm">
+            <table className="w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    Beschreibung
+                  </th>
+                  <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    Menge
+                  </th>
+                  <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    Einzelpreis
+                  </th>
+                  <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    Gesamt
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 bg-white">
+                {savedLineItems.map((item, idx) => {
+                  const lineTotal = item.quantity * item.price;
+                  const isNeg = lineTotal < 0;
+                  return (
+                    <tr key={idx} className={isNeg ? "bg-red-50/40" : undefined}>
+                      <td
+                        className={`px-5 py-3 text-sm ${
+                          isNeg ? "text-red-700" : "text-gray-900"
+                        }`}
+                      >
+                        {item.description}
+                      </td>
+                      <td className="px-5 py-3 text-right text-sm text-gray-600">
+                        {item.quantity}
+                      </td>
+                      <td
+                        className={`px-5 py-3 text-right text-sm ${
+                          isNeg ? "text-red-700" : "text-gray-600"
+                        }`}
+                      >
+                        {formatEUR(item.price)}
+                      </td>
+                      <td
+                        className={`px-5 py-3 text-right text-sm font-medium ${
+                          isNeg ? "text-red-700" : "text-gray-900"
+                        }`}
+                      >
+                        {formatEUR(lineTotal)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot className="bg-gray-50 text-sm">
+                {invoice.subtotal != null && (
+                  <tr>
+                    <td
+                      colSpan={3}
+                      className="px-5 py-3 text-right font-medium text-gray-700"
+                    >
+                      Zwischensumme
+                    </td>
+                    <td className="px-5 py-3 text-right text-gray-900">
+                      {formatEUR(invoice.subtotal)}
+                    </td>
+                  </tr>
+                )}
+                {invoice.shipping != null &&
+                  parseFloat(invoice.shipping) !== 0 && (
+                    <tr>
+                      <td
+                        colSpan={3}
+                        className="px-5 py-3 text-right font-medium text-gray-700"
+                      >
+                        Versand
+                      </td>
+                      <td className="px-5 py-3 text-right text-gray-900">
+                        {formatEUR(invoice.shipping)}
+                      </td>
+                    </tr>
+                  )}
+                {invoice.tax_amount != null &&
+                  parseFloat(invoice.tax_amount) !== 0 && (
+                    <tr>
+                      <td
+                        colSpan={3}
+                        className="px-5 py-3 text-right font-medium text-gray-700"
+                      >
+                        MwSt. ({invoice.tax_rate ?? 0}%)
+                      </td>
+                      <td className="px-5 py-3 text-right text-gray-900">
+                        {formatEUR(invoice.tax_amount)}
+                      </td>
+                    </tr>
+                  )}
+                <tr className="border-t border-gray-300">
+                  <td
+                    colSpan={3}
+                    className="px-5 py-3 text-right font-bold text-gray-900"
+                  >
+                    Gesamt
+                  </td>
+                  <td className="px-5 py-3 text-right font-bold text-gray-900">
+                    {formatEUR(invoice.amount)}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {!hasSavedLineItems && order && order.line_items.length > 0 && (
         <div className="mt-8">
           <h3 className="text-sm font-semibold text-gray-700 mb-3">
             Positionen
@@ -192,17 +362,16 @@ export default async function InvoiceDetailPage({
                       {item.title}
                     </td>
                     <td className="px-5 py-3 text-sm text-gray-500">
-                      {item.sku || "\u2014"}
+                      {item.sku || "—"}
                     </td>
                     <td className="px-5 py-3 text-right text-sm text-gray-600">
                       {item.quantity}
                     </td>
                     <td className="px-5 py-3 text-right text-sm text-gray-600">
-                      {item.price} {order.currency}
+                      {formatEUR(item.price)}
                     </td>
                     <td className="px-5 py-3 text-right text-sm font-medium text-gray-900">
-                      {(item.quantity * parseFloat(item.price)).toFixed(2)}{" "}
-                      {order.currency}
+                      {formatEUR(item.quantity * parseFloat(item.price))}
                     </td>
                   </tr>
                 ))}
@@ -216,12 +385,23 @@ export default async function InvoiceDetailPage({
                     Gesamtbetrag
                   </td>
                   <td className="px-5 py-3 text-right text-sm font-bold text-gray-900">
-                    {order.total_price} {order.currency}
+                    {formatEUR(order.total_price)}
                   </td>
                 </tr>
               </tfoot>
             </table>
           </div>
+        </div>
+      )}
+
+      {invoice.notes && (
+        <div className="mt-6 rounded-lg border border-gray-200 bg-white p-4">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+            Notiz
+          </h4>
+          <p className="mt-2 text-sm text-gray-700 whitespace-pre-line">
+            {invoice.notes}
+          </p>
         </div>
       )}
 

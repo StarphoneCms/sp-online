@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createServerComponentClient } from "@/lib/supabase/server";
+import { formatEUR } from "@/lib/format";
 import InvoiceActions from "./InvoiceActions";
 
 const typeLabels: Record<string, string> = {
@@ -139,7 +140,7 @@ export default async function InvoicesPage() {
                     >
                       {invoice.invoice_number}
                     </Link>
-                    {invoice.shopify_order_id === "manual" && (
+                    {(invoice.is_manual || invoice.shopify_order_id === "manual") && (
                       <span className="ml-1.5 inline-flex items-center rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">
                         M
                       </span>
@@ -158,7 +159,7 @@ export default async function InvoicesPage() {
                     </span>
                   </td>
                   <td className="whitespace-nowrap px-3 py-2.5 text-sm text-gray-600">
-                    {invoice.amount} {invoice.currency}
+                    {formatEUR(invoice.amount)}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2.5 text-sm text-gray-600">
                     {new Date(invoice.created_at).toLocaleDateString("de-DE")}
