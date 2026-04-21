@@ -8,6 +8,7 @@ const GRAY = { r: 107, g: 114, b: 128 }
 const LIGHT_GRAY = { r: 243, g: 244, b: 246 }
 const WHITE = { r: 255, g: 255, b: 255 }
 const BLUE_BG = { r: 239, g: 246, b: 255 }
+const AMBER = { r: 180, g: 83, b: 9 }
 
 type Color = { r: number; g: number; b: number }
 
@@ -189,16 +190,18 @@ export function generateInvoicePdf(
       doc.rect(mL, y - 3.5, cW, rowH, 'F')
     }
 
+    const negative = lineTotal < 0
     setColor(doc, GRAY)
     doc.text(String(rowIdx + 1), c.num + 2, y)
-    setColor(doc, DARK)
+    setColor(doc, negative ? AMBER : DARK)
     const titleText = item.title.length > 55 ? item.title.substring(0, 52) + '...' : item.title
     doc.text(titleText, c.desc, y)
     setColor(doc, GRAY)
     doc.text(String(item.quantity), c.qty, y, { align: 'right' })
+    setColor(doc, negative ? AMBER : GRAY)
     doc.text(`${price.toFixed(2)} ${cur}`, c.unit, y, { align: 'right' })
     doc.setFont('helvetica', 'bold')
-    setColor(doc, DARK)
+    setColor(doc, negative ? AMBER : DARK)
     doc.text(`${lineTotal.toFixed(2)} ${cur}`, c.total, y, { align: 'right' })
     doc.setFont('helvetica', 'normal')
     y += rowH

@@ -45,6 +45,13 @@ export default function NewInvoicePage() {
     ]);
   }
 
+  function addDiscount() {
+    setLineItems([
+      ...lineItems,
+      { description: "Rabatt", quantity: 1, unitPrice: 0, currency },
+    ]);
+  }
+
   function removeLineItem(index: number) {
     setLineItems(lineItems.filter((_, i) => i !== index));
   }
@@ -223,13 +230,22 @@ export default function NewInvoicePage() {
         <div>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-gray-700">Positionen</h2>
-            <button
-              type="button"
-              onClick={addLineItem}
-              className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              + Position hinzufügen
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={addLineItem}
+                className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                + Position hinzufügen
+              </button>
+              <button
+                type="button"
+                onClick={addDiscount}
+                className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100 transition-colors"
+              >
+                + Rabatt hinzufügen
+              </button>
+            </div>
           </div>
           <div className="overflow-hidden rounded-lg border border-gray-200">
             <table className="w-full divide-y divide-gray-200">
@@ -251,55 +267,66 @@ export default function NewInvoicePage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 bg-white">
-                {lineItems.map((item, i) => (
-                  <tr key={i}>
-                    <td className="px-4 py-2">
-                      <input
-                        type="text"
-                        required
-                        value={item.description}
-                        onChange={(e) => updateLineItem(i, "description", e.target.value)}
-                        placeholder="Artikel / Dienstleistung"
-                        className="w-full rounded border border-gray-200 px-2 py-1 text-sm focus:border-gray-400 focus:outline-none"
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <input
-                        type="number"
-                        required
-                        min={1}
-                        value={item.quantity}
-                        onChange={(e) => updateLineItem(i, "quantity", parseInt(e.target.value) || 0)}
-                        className="w-full rounded border border-gray-200 px-2 py-1 text-sm text-right focus:border-gray-400 focus:outline-none"
-                      />
-                    </td>
-                    <td className="px-4 py-2">
-                      <input
-                        type="number"
-                        required
-                        min={0}
-                        step={0.01}
-                        value={item.unitPrice}
-                        onChange={(e) => updateLineItem(i, "unitPrice", parseFloat(e.target.value) || 0)}
-                        className="w-full rounded border border-gray-200 px-2 py-1 text-sm text-right focus:border-gray-400 focus:outline-none"
-                      />
-                    </td>
-                    <td className="px-4 py-2 text-right text-sm font-medium text-gray-900">
-                      {(item.quantity * item.unitPrice).toFixed(2)} {currency}
-                    </td>
-                    <td className="px-4 py-2 text-center">
-                      {lineItems.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removeLineItem(i)}
-                          className="text-red-400 hover:text-red-600 text-sm"
-                        >
-                          &#10005;
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {lineItems.map((item, i) => {
+                  const lineTotal = item.quantity * item.unitPrice;
+                  const isNegative = lineTotal < 0;
+                  return (
+                    <tr key={i} className={isNegative ? "bg-amber-50/40" : undefined}>
+                      <td className="px-4 py-2">
+                        <input
+                          type="text"
+                          required
+                          value={item.description}
+                          onChange={(e) => updateLineItem(i, "description", e.target.value)}
+                          placeholder="Artikel / Dienstleistung"
+                          className="w-full rounded border border-gray-200 px-2 py-1 text-sm focus:border-gray-400 focus:outline-none"
+                        />
+                      </td>
+                      <td className="px-4 py-2">
+                        <input
+                          type="number"
+                          required
+                          min={1}
+                          value={item.quantity}
+                          onChange={(e) => updateLineItem(i, "quantity", parseInt(e.target.value) || 0)}
+                          className="w-full rounded border border-gray-200 px-2 py-1 text-sm text-right focus:border-gray-400 focus:outline-none"
+                        />
+                      </td>
+                      <td className="px-4 py-2">
+                        <input
+                          type="number"
+                          required
+                          step={0.01}
+                          value={item.unitPrice}
+                          onChange={(e) => updateLineItem(i, "unitPrice", parseFloat(e.target.value) || 0)}
+                          className={`w-full rounded border px-2 py-1 text-sm text-right focus:outline-none ${
+                            isNegative
+                              ? "border-amber-300 text-amber-700 focus:border-amber-500"
+                              : "border-gray-200 focus:border-gray-400"
+                          }`}
+                        />
+                      </td>
+                      <td
+                        className={`px-4 py-2 text-right text-sm font-medium ${
+                          isNegative ? "text-amber-700" : "text-gray-900"
+                        }`}
+                      >
+                        {lineTotal.toFixed(2)} {currency}
+                      </td>
+                      <td className="px-4 py-2 text-center">
+                        {lineItems.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeLineItem(i)}
+                            className="text-red-400 hover:text-red-600 text-sm"
+                          >
+                            &#10005;
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
               <tfoot className="bg-gray-50">
                 <tr>

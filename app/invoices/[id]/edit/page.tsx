@@ -206,7 +206,6 @@ export default function EditInvoicePage() {
             <input
               type="number"
               required
-              min={0}
               step={0.01}
               value={amount}
               onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
