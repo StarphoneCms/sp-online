@@ -484,6 +484,29 @@ export function generateInvoicePdf(
     doc.text(formatEUR(totalAmount || subtotal), mL + 28, y)
   }
 
+  // ─── 6b. NOTES ──────────────────────────────────────
+  if (invoice.notes && invoice.notes.trim()) {
+    y += 10
+
+    doc.setFontSize(6.5)
+    doc.setFont('helvetica', 'bold')
+    setColor(doc, BLUE)
+    doc.text('NOTES', mL, y)
+
+    y += 5
+    doc.setFontSize(8)
+    doc.setFont('helvetica', 'normal')
+    setColor(doc, DARK)
+    // Wrap notes text to content width
+    const notesLines = doc.splitTextToSize(invoice.notes.trim(), cW) as string[]
+    const footerSafeY = 268
+    for (const line of notesLines) {
+      if (y > footerSafeY) break
+      doc.text(line, mL, y)
+      y += 4
+    }
+  }
+
   // ─── 7. FOOTER ────────────────────────────────────────
   const footerY = 272
   doc.setDrawColor(BLUE.r, BLUE.g, BLUE.b)

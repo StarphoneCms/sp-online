@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -38,6 +38,19 @@ export default function EditInvoicePage() {
 
   const vatNormalized = customerVat.replace(/\s/g, "").toUpperCase();
   const vatValid = vatNormalized.length > 0 && VAT_REGEX.test(vatNormalized);
+
+  const [focusIndex, setFocusIndex] = useState<number | null>(null);
+  const descRefs = useRef<Array<HTMLInputElement | null>>([]);
+
+  useEffect(() => {
+    if (focusIndex == null) return;
+    const el = descRefs.current[focusIndex];
+    if (el) {
+      el.focus();
+      el.select();
+    }
+    setFocusIndex(null);
+  }, [focusIndex, lineItems.length]);
 
   useEffect(() => {
     async function load() {
@@ -87,10 +100,11 @@ export default function EditInvoicePage() {
   }
 
   function addDiscount() {
-    setLineItems([
-      ...lineItems,
-      { description: "Rabatt", quantity: 1, price: 0 },
-    ]);
+    // "Rabatt" is a suggested default only — the user can rename the row
+    // to whatever fits ("Treuebonus Stammkunde", "10% Mengenrabatt", …).
+    const next = [...lineItems, { description: "Rabatt", quantity: 1, price: 0 }];
+    setLineItems(next);
+    setFocusIndex(next.length - 1);
   }
 
   function removeLineItem(index: number) {
@@ -355,12 +369,16 @@ export default function EditInvoicePage() {
                       >
                         <td className="px-4 py-2">
                           <input
+                            ref={(el) => {
+                              descRefs.current[i] = el;
+                            }}
                             type="text"
                             required
                             value={item.description}
                             onChange={(e) =>
                               updateLineItem(i, "description", e.target.value)
                             }
+                            onFocus={(e) => e.currentTarget.select()}
                             placeholder="Artikel / Dienstleistung"
                             className="w-full rounded border border-gray-200 px-2 py-1 text-sm focus:border-gray-400 focus:outline-none"
                           />

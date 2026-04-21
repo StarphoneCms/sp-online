@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -40,6 +40,21 @@ export default function NewInvoicePage() {
     { description: "", quantity: 1, price: 0 },
   ]);
 
+  // Index of the line item whose description input should be focused
+  // and text-selected (used after "+ Rabatt" so user can quickly rename)
+  const [focusIndex, setFocusIndex] = useState<number | null>(null);
+  const descRefs = useRef<Array<HTMLInputElement | null>>([]);
+
+  useEffect(() => {
+    if (focusIndex == null) return;
+    const el = descRefs.current[focusIndex];
+    if (el) {
+      el.focus();
+      el.select();
+    }
+    setFocusIndex(null);
+  }, [focusIndex, lineItems.length]);
+
   const taxRate = TAX_RATE_BY_TYPE[invoiceType];
   const vatNormalized = customerVat.replace(/\s/g, "").toUpperCase();
   const vatValid = vatNormalized.length > 0 && VAT_REGEX.test(vatNormalized);
@@ -52,10 +67,11 @@ export default function NewInvoicePage() {
   }
 
   function addDiscount() {
-    setLineItems([
-      ...lineItems,
-      { description: "Rabatt", quantity: 1, price: 0 },
-    ]);
+    // "Rabatt" is just a suggested default — user can (and should) overwrite
+    // it with whatever makes sense ("Treuebonus Stammkunde", "10% Mengenrabatt", …)
+    const next = [...lineItems, { description: "Rabatt", quantity: 1, price: 0 }];
+    setLineItems(next);
+    setFocusIndex(next.length - 1);
   }
 
   function removeLineItem(index: number) {
@@ -302,12 +318,16 @@ export default function NewInvoicePage() {
                     >
                       <td className="px-4 py-2">
                         <input
+                          ref={(el) => {
+                            descRefs.current[i] = el;
+                          }}
                           type="text"
                           required
                           value={item.description}
                           onChange={(e) =>
                             updateLineItem(i, "description", e.target.value)
                           }
+                          onFocus={(e) => e.currentTarget.select()}
                           placeholder="Artikel / Dienstleistung"
                           className="w-full rounded border border-gray-200 px-2 py-1 text-sm focus:border-gray-400 focus:outline-none"
                         />
