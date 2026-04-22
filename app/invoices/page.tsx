@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createServerComponentClient } from "@/lib/supabase/server";
-import { formatEUR } from "@/lib/format";
+import { formatMoney } from "@/lib/format";
 import InvoiceActions from "./InvoiceActions";
 
 const typeLabels: Record<string, string> = {
@@ -159,7 +159,7 @@ export default async function InvoicesPage() {
                     </span>
                   </td>
                   <td className="whitespace-nowrap px-3 py-2.5 text-sm text-gray-600">
-                    {formatEUR(invoice.amount)}
+                    {formatMoney(invoice.amount, invoice.currency)}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2.5 text-sm text-gray-600">
                     {new Date(invoice.created_at).toLocaleDateString("de-DE")}

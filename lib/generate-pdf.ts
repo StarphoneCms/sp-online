@@ -19,14 +19,20 @@ function setFill(doc: jsPDF, c: Color) {
   doc.setFillColor(c.r, c.g, c.b)
 }
 
-// Format as "1.234,56 €" — German locale via Intl
-function formatEUR(value: number): string {
-  return new Intl.NumberFormat('de-DE', {
-    style: 'currency',
-    currency: 'EUR',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value)
+// Format with given ISO currency code — German locale via Intl.
+// Falls back to "1234,56 XYZ" for unknown currency codes.
+function formatMoney(value: number, currency: string): string {
+  const cur = (currency && currency.trim()) || 'EUR'
+  try {
+    return new Intl.NumberFormat('de-DE', {
+      style: 'currency',
+      currency: cur,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value)
+  } catch {
+    return `${value.toFixed(2).replace('.', ',')} ${cur}`
+  }
 }
 
 interface SavedLineItem {
@@ -77,6 +83,11 @@ export function generateInvoicePdf(
   const fmtDate = (d: Date) =>
     d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 
+  // Use the invoice's stored currency (presentment for Shopify imports,
+  // user-selected for manual invoices). Falls back to EUR.
+  const cur = (invoice.currency && invoice.currency.trim()) || 'EUR'
+  const fmt = (v: number) => formatMoney(v, cur)
+
   // ─── 1. HEADER ─────────────────────────────────────────
   doc.addImage(`data:image/jpeg;base64,${LOGO_BASE64}`, 'JPEG', mL, 10, 50, 12.5)
 
@@ -112,7 +123,7 @@ export function generateInvoicePdf(
   ]
   const metaRight = [
     ['Payment', 'Paid in full'],
-    ['Currency', 'EUR'],
+    ['Currency', cur],
   ]
 
   metaLeft.forEach(([label, value], i) => {
@@ -248,10 +259,10 @@ export function generateInvoicePdf(
       setColor(doc, GRAY)
       doc.text(String(qty), c.qty, y, { align: 'right' })
       setColor(doc, negative ? RED : GRAY)
-      doc.text(formatEUR(price), c.unit, y, { align: 'right' })
+      doc.text(fmt(price), c.unit, y, { align: 'right' })
       doc.setFont('helvetica', 'bold')
       setColor(doc, negative ? RED : DARK)
-      doc.text(formatEUR(lineTotal), c.total, y, { align: 'right' })
+      doc.text(fmt(lineTotal), c.total, y, { align: 'right' })
       doc.setFont('helvetica', 'normal')
       y += rowH
       rowIdx++
@@ -279,10 +290,10 @@ export function generateInvoicePdf(
       setColor(doc, GRAY)
       doc.text(String(item.quantity), c.qty, y, { align: 'right' })
       setColor(doc, negative ? RED : GRAY)
-      doc.text(formatEUR(price), c.unit, y, { align: 'right' })
+      doc.text(fmt(price), c.unit, y, { align: 'right' })
       doc.setFont('helvetica', 'bold')
       setColor(doc, negative ? RED : DARK)
-      doc.text(formatEUR(lineTotal), c.total, y, { align: 'right' })
+      doc.text(fmt(lineTotal), c.total, y, { align: 'right' })
       doc.setFont('helvetica', 'normal')
       y += rowH
       rowIdx++
@@ -306,10 +317,10 @@ export function generateInvoicePdf(
       doc.text(`Shipping: ${shipping.title}`, c.desc, y)
       setColor(doc, GRAY)
       doc.text('1', c.qty, y, { align: 'right' })
-      doc.text(formatEUR(shippingPrice), c.unit, y, { align: 'right' })
+      doc.text(fmt(shippingPrice), c.unit, y, { align: 'right' })
       doc.setFont('helvetica', 'bold')
       setColor(doc, DARK)
-      doc.text(formatEUR(shippingPrice), c.total, y, { align: 'right' })
+      doc.text(fmt(shippingPrice), c.total, y, { align: 'right' })
       doc.setFont('helvetica', 'normal')
       y += rowH
       rowIdx++
@@ -336,10 +347,10 @@ export function generateInvoicePdf(
     doc.text('Versand', c.desc, y)
     setColor(doc, GRAY)
     doc.text('1', c.qty, y, { align: 'right' })
-    doc.text(formatEUR(savedShipping), c.unit, y, { align: 'right' })
+    doc.text(fmt(savedShipping), c.unit, y, { align: 'right' })
     doc.setFont('helvetica', 'bold')
     setColor(doc, DARK)
-    doc.text(formatEUR(savedShipping), c.total, y, { align: 'right' })
+    doc.text(fmt(savedShipping), c.total, y, { align: 'right' })
     doc.setFont('helvetica', 'normal')
     y += rowH
     rowIdx++
@@ -397,13 +408,13 @@ export function generateInvoicePdf(
 
   doc.text('Subtotal', totalsX, y)
   setColor(doc, DARK)
-  doc.text(formatEUR(netDisplay), totalsValX, y, { align: 'right' })
+  doc.text(fmt(netDisplay), totalsValX, y, { align: 'right' })
 
   y += 5.5
   setColor(doc, GRAY)
   doc.text(vatLabel, totalsX, y)
   setColor(doc, DARK)
-  doc.text(formatEUR(taxDisplay), totalsValX, y, { align: 'right' })
+  doc.text(fmt(taxDisplay), totalsValX, y, { align: 'right' })
 
   y += 4
   doc.setDrawColor(DARK.r, DARK.g, DARK.b)
@@ -416,7 +427,7 @@ export function generateInvoicePdf(
   doc.setFont('helvetica', 'bold')
   setColor(doc, DARK)
   doc.text('TOTAL', totalsX, y)
-  doc.text(formatEUR(totalAmount || subtotal), totalsValX, y, { align: 'right' })
+  doc.text(fmt(totalAmount || subtotal), totalsValX, y, { align: 'right' })
 
   // ─── 6. LEGAL TEXT BOX ────────────────────────────────
   y += 14
@@ -429,7 +440,7 @@ export function generateInvoicePdf(
   } else if (invoice.invoice_type === 'commercial') {
     legalText =
       'VAT-exempt export delivery pursuant to §4 No. 1a UStG. ' +
-      `Customs Value: ${formatEUR(totalAmount || subtotal)}`
+      `Customs Value: ${fmt(totalAmount || subtotal)}`
   } else {
     legalText = 'All prices include 19% VAT. Payment due within 14 days.'
   }
@@ -481,7 +492,7 @@ export function generateInvoicePdf(
     doc.text('Customs Value:', mL, y)
     doc.setFont('helvetica', 'bold')
     setColor(doc, DARK)
-    doc.text(formatEUR(totalAmount || subtotal), mL + 28, y)
+    doc.text(fmt(totalAmount || subtotal), mL + 28, y)
   }
 
   // ─── 6b. NOTES ──────────────────────────────────────

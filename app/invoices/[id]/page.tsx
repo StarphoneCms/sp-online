@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createServerComponentClient } from "@/lib/supabase/server";
 import { shopifyFetch, type ShopifyOrder } from "@/lib/shopify";
-import { formatEUR } from "@/lib/format";
+import { formatMoney } from "@/lib/format";
 import SendEmailButton from "./SendEmailButton";
 
 const typeLabels: Record<string, string> = {
@@ -170,14 +170,14 @@ export default async function InvoiceDetailPage({
             Betrag
           </h3>
           <p className="mt-3 text-3xl font-bold text-gray-900">
-            {formatEUR(invoice.amount)}
+            {formatMoney(invoice.amount, invoice.currency)}
           </p>
           <div className="mt-4 space-y-1 text-sm text-gray-500">
             {invoice.subtotal != null && (
               <div className="flex justify-between">
                 <span>Zwischensumme</span>
                 <span className="font-medium text-gray-700">
-                  {formatEUR(invoice.subtotal)}
+                  {formatMoney(invoice.subtotal, invoice.currency)}
                 </span>
               </div>
             )}
@@ -185,7 +185,7 @@ export default async function InvoiceDetailPage({
               <div className="flex justify-between">
                 <span>Versand</span>
                 <span className="font-medium text-gray-700">
-                  {formatEUR(invoice.shipping)}
+                  {formatMoney(invoice.shipping, invoice.currency)}
                 </span>
               </div>
             )}
@@ -193,7 +193,7 @@ export default async function InvoiceDetailPage({
               <div className="flex justify-between">
                 <span>MwSt. ({invoice.tax_rate ?? 0}%)</span>
                 <span className="font-medium text-gray-700">
-                  {formatEUR(invoice.tax_amount)}
+                  {formatMoney(invoice.tax_amount, invoice.currency)}
                 </span>
               </div>
             )}
@@ -257,14 +257,14 @@ export default async function InvoiceDetailPage({
                           isNeg ? "text-red-700" : "text-gray-600"
                         }`}
                       >
-                        {formatEUR(item.price)}
+                        {formatMoney(item.price, invoice.currency)}
                       </td>
                       <td
                         className={`px-5 py-3 text-right text-sm font-medium ${
                           isNeg ? "text-red-700" : "text-gray-900"
                         }`}
                       >
-                        {formatEUR(lineTotal)}
+                        {formatMoney(lineTotal, invoice.currency)}
                       </td>
                     </tr>
                   );
@@ -280,7 +280,7 @@ export default async function InvoiceDetailPage({
                       Zwischensumme
                     </td>
                     <td className="px-5 py-3 text-right text-gray-900">
-                      {formatEUR(invoice.subtotal)}
+                      {formatMoney(invoice.subtotal, invoice.currency)}
                     </td>
                   </tr>
                 )}
@@ -294,7 +294,7 @@ export default async function InvoiceDetailPage({
                         Versand
                       </td>
                       <td className="px-5 py-3 text-right text-gray-900">
-                        {formatEUR(invoice.shipping)}
+                        {formatMoney(invoice.shipping, invoice.currency)}
                       </td>
                     </tr>
                   )}
@@ -308,7 +308,7 @@ export default async function InvoiceDetailPage({
                         MwSt. ({invoice.tax_rate ?? 0}%)
                       </td>
                       <td className="px-5 py-3 text-right text-gray-900">
-                        {formatEUR(invoice.tax_amount)}
+                        {formatMoney(invoice.tax_amount, invoice.currency)}
                       </td>
                     </tr>
                   )}
@@ -320,7 +320,7 @@ export default async function InvoiceDetailPage({
                     Gesamt
                   </td>
                   <td className="px-5 py-3 text-right font-bold text-gray-900">
-                    {formatEUR(invoice.amount)}
+                    {formatMoney(invoice.amount, invoice.currency)}
                   </td>
                 </tr>
               </tfoot>
@@ -368,10 +368,10 @@ export default async function InvoiceDetailPage({
                       {item.quantity}
                     </td>
                     <td className="px-5 py-3 text-right text-sm text-gray-600">
-                      {formatEUR(item.price)}
+                      {formatMoney(item.price, order.currency)}
                     </td>
                     <td className="px-5 py-3 text-right text-sm font-medium text-gray-900">
-                      {formatEUR(item.quantity * parseFloat(item.price))}
+                      {formatMoney(item.quantity * parseFloat(item.price), order.currency)}
                     </td>
                   </tr>
                 ))}
@@ -385,7 +385,7 @@ export default async function InvoiceDetailPage({
                     Gesamtbetrag
                   </td>
                   <td className="px-5 py-3 text-right text-sm font-bold text-gray-900">
-                    {formatEUR(order.total_price)}
+                    {formatMoney(order.total_price, order.currency)}
                   </td>
                 </tr>
               </tfoot>

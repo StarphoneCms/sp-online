@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { type InvoiceType } from "@/lib/shopify";
-import { formatEUR, roundMoney } from "@/lib/format";
+import { formatMoney, roundMoney } from "@/lib/format";
 
 interface LineItem {
   description: string;
@@ -35,6 +35,7 @@ export default function NewInvoicePage() {
   const [invoiceType, setInvoiceType] = useState<InvoiceType>("standard");
   const [notes, setNotes] = useState("");
   const [shipping, setShipping] = useState(0);
+  const [currency, setCurrency] = useState("EUR");
 
   const [lineItems, setLineItems] = useState<LineItem[]>([
     { description: "", quantity: 1, price: 0 },
@@ -124,7 +125,7 @@ export default function NewInvoicePage() {
         tax_rate: taxRate,
         tax_amount: taxAmount,
         amount: total,
-        currency: "EUR",
+        currency,
         is_manual: true,
         shopify_order_id: null,
         shopify_order_number: "Manuell",
@@ -237,8 +238,8 @@ export default function NewInvoicePage() {
           </div>
         </div>
 
-        {/* Invoice type */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {/* Invoice type, currency, shipping */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>
             <label className="block text-xs font-medium text-gray-500">
               Rechnungstyp
@@ -255,7 +256,26 @@ export default function NewInvoicePage() {
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500">
-              Versandkosten (EUR)
+              Währung
+            </label>
+            <select
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value)}
+              className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+            >
+              <option value="EUR">EUR (€)</option>
+              <option value="USD">USD ($)</option>
+              <option value="GBP">GBP (£)</option>
+              <option value="CHF">CHF</option>
+              <option value="CAD">CAD</option>
+              <option value="SEK">SEK</option>
+              <option value="NOK">NOK</option>
+              <option value="DKK">DKK</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500">
+              Versandkosten ({currency})
             </label>
             <input
               type="number"
@@ -373,7 +393,7 @@ export default function NewInvoicePage() {
                           isNegative ? "text-red-700" : "text-gray-900"
                         }`}
                       >
-                        {formatEUR(lineTotal)}
+                        {formatMoney(lineTotal, currency)}
                       </td>
                       <td className="px-4 py-2 text-center">
                         {lineItems.length > 1 && (
@@ -399,7 +419,7 @@ export default function NewInvoicePage() {
                     Zwischensumme
                   </td>
                   <td className="px-4 py-2 text-right text-gray-900">
-                    {formatEUR(subtotal)}
+                    {formatMoney(subtotal, currency)}
                   </td>
                   <td />
                 </tr>
@@ -412,7 +432,7 @@ export default function NewInvoicePage() {
                       Versand
                     </td>
                     <td className="px-4 py-2 text-right text-gray-900">
-                      {formatEUR(shipping)}
+                      {formatMoney(shipping, currency)}
                     </td>
                     <td />
                   </tr>
@@ -426,7 +446,7 @@ export default function NewInvoicePage() {
                       MwSt. ({taxRate}%)
                     </td>
                     <td className="px-4 py-2 text-right text-gray-900">
-                      {formatEUR(taxAmount)}
+                      {formatMoney(taxAmount, currency)}
                     </td>
                     <td />
                   </tr>
@@ -439,7 +459,7 @@ export default function NewInvoicePage() {
                     Gesamt
                   </td>
                   <td className="px-4 py-2 text-right font-bold text-gray-900">
-                    {formatEUR(total)}
+                    {formatMoney(total, currency)}
                   </td>
                   <td />
                 </tr>

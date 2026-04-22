@@ -5,7 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { type InvoiceType } from "@/lib/shopify";
-import { formatEUR, roundMoney } from "@/lib/format";
+import { formatMoney, roundMoney } from "@/lib/format";
 
 interface LineItem {
   description: string;
@@ -35,6 +35,8 @@ export default function EditInvoicePage() {
   const [shipping, setShipping] = useState(0);
   const [taxRate, setTaxRate] = useState(19);
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
+  const [currency, setCurrency] = useState("EUR");
+  const [isManual, setIsManual] = useState(false);
 
   const vatNormalized = customerVat.replace(/\s/g, "").toUpperCase();
   const vatValid = vatNormalized.length > 0 && VAT_REGEX.test(vatNormalized);
@@ -75,6 +77,8 @@ export default function EditInvoicePage() {
       setCustomerAddress(data.customer_address || "");
       setNotes(data.notes || "");
       setShipping(parseFloat(data.shipping) || 0);
+      setCurrency(data.currency || "EUR");
+      setIsManual(!!data.is_manual);
       setTaxRate(
         data.tax_rate != null
           ? parseFloat(data.tax_rate)
@@ -153,6 +157,9 @@ export default function EditInvoicePage() {
         tax_rate: taxRate,
         tax_amount: taxAmount,
         amount: total,
+        // Only manual invoices can change their currency. Shopify-import
+        // currency is locked to the order's presentment currency.
+        ...(isManual ? { currency } : {}),
       })
       .eq("id", id);
 
@@ -203,7 +210,7 @@ export default function EditInvoicePage() {
       <p className="mt-1 text-sm text-gray-500">{invoiceNumber}</p>
 
       <form onSubmit={handleSubmit} className="mt-8 space-y-8">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>
             <label className="block text-xs font-medium text-gray-500">
               Rechnungsnr.
@@ -232,6 +239,34 @@ export default function EditInvoicePage() {
               <option value="reverse_charge">Reverse Charge (0%)</option>
               <option value="commercial">Commercial Invoice (0%)</option>
             </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500">
+              Währung
+            </label>
+            {isManual ? (
+              <select
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+              >
+                <option value="EUR">EUR (€)</option>
+                <option value="USD">USD ($)</option>
+                <option value="GBP">GBP (£)</option>
+                <option value="CHF">CHF</option>
+                <option value="CAD">CAD</option>
+                <option value="SEK">SEK</option>
+                <option value="NOK">NOK</option>
+                <option value="DKK">DKK</option>
+              </select>
+            ) : (
+              <div className="mt-1 flex h-[38px] items-center rounded-md border border-gray-200 bg-gray-50 px-3 text-sm font-medium text-gray-700">
+                {currency}
+                <span className="ml-2 text-xs text-gray-400">
+                  (Bestellwährung)
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -297,7 +332,7 @@ export default function EditInvoicePage() {
 
         <div>
           <label className="block text-xs font-medium text-gray-500">
-            Versandkosten (EUR)
+            Versandkosten ({currency})
           </label>
           <input
             type="number"
@@ -424,7 +459,7 @@ export default function EditInvoicePage() {
                             isNeg ? "text-red-700" : "text-gray-900"
                           }`}
                         >
-                          {formatEUR(lineTotal)}
+                          {formatMoney(lineTotal, currency)}
                         </td>
                         <td className="px-4 py-2 text-center">
                           <button
@@ -449,7 +484,7 @@ export default function EditInvoicePage() {
                     Zwischensumme
                   </td>
                   <td className="px-4 py-2 text-right text-gray-900">
-                    {formatEUR(subtotal)}
+                    {formatMoney(subtotal, currency)}
                   </td>
                   <td />
                 </tr>
@@ -462,7 +497,7 @@ export default function EditInvoicePage() {
                       Versand
                     </td>
                     <td className="px-4 py-2 text-right text-gray-900">
-                      {formatEUR(shipping)}
+                      {formatMoney(shipping, currency)}
                     </td>
                     <td />
                   </tr>
@@ -476,7 +511,7 @@ export default function EditInvoicePage() {
                       MwSt. ({taxRate}%)
                     </td>
                     <td className="px-4 py-2 text-right text-gray-900">
-                      {formatEUR(taxAmount)}
+                      {formatMoney(taxAmount, currency)}
                     </td>
                     <td />
                   </tr>
@@ -489,7 +524,7 @@ export default function EditInvoicePage() {
                     Gesamt
                   </td>
                   <td className="px-4 py-2 text-right font-bold text-gray-900">
-                    {formatEUR(total)}
+                    {formatMoney(total, currency)}
                   </td>
                   <td />
                 </tr>
