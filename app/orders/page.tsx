@@ -3,9 +3,12 @@ import {
   shopifyFetch,
   fetchCustomerTaxNumber,
   detectInvoiceType,
+  getPresentmentAmount,
+  getPresentmentCurrency,
   type ShopifyOrder,
   type InvoiceType,
 } from "@/lib/shopify";
+import { formatMoney } from "@/lib/format";
 
 function InvoiceTypeBadge({ type }: { type: InvoiceType }) {
   const styles: Record<InvoiceType, string> = {
@@ -170,7 +173,10 @@ export default async function OrdersPage({
                       {customerName}
                     </td>
                     <td className="whitespace-nowrap px-3 py-2.5 text-sm text-gray-600">
-                      {order.total_price} {order.currency}
+                      {formatMoney(
+                        getPresentmentAmount(order.total_price_set, order.total_price),
+                        getPresentmentCurrency(order)
+                      )}
                     </td>
                     <td className="whitespace-nowrap px-3 py-2.5 text-sm text-gray-600">
                       {country}

@@ -19,19 +19,23 @@ function setFill(doc: jsPDF, c: Color) {
   doc.setFillColor(c.r, c.g, c.b)
 }
 
-// Format with given ISO currency code — German locale via Intl.
-// Falls back to "1234,56 XYZ" for unknown currency codes.
+// Format money for the invoice PDF.
+// EUR  → de-DE  ("1.234,56 €")
+// else → en-GB  ("CA$1,234.56", "$1,234.56", "£1,234.56")
+// Non-EUR locale matches international invoice conventions for export
+// invoices to non-DACH customers.
 function formatMoney(value: number, currency: string): string {
   const cur = (currency && currency.trim()) || 'EUR'
+  const locale = cur === 'EUR' ? 'de-DE' : 'en-GB'
   try {
-    return new Intl.NumberFormat('de-DE', {
+    return new Intl.NumberFormat(locale, {
       style: 'currency',
       currency: cur,
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(value)
   } catch {
-    return `${value.toFixed(2).replace('.', ',')} ${cur}`
+    return `${value.toFixed(2)} ${cur}`
   }
 }
 
@@ -516,6 +520,24 @@ export function generateInvoicePdf(
       doc.text(line, mL, y)
       y += 4
     }
+  }
+
+  // ─── 6c. FOREIGN CURRENCY NOTE ──────────────────────
+  // For non-EUR invoices, tell the customer how to pay.
+  if (cur !== 'EUR') {
+    const noteY = 264
+    setFill(doc, BLUE_BG)
+    doc.rect(mL, noteY - 3, cW, 6, 'F')
+    doc.setFillColor(BLUE.r, BLUE.g, BLUE.b)
+    doc.rect(mL, noteY - 3, 1.2, 6, 'F')
+    doc.setFontSize(7)
+    doc.setFont('helvetica', 'normal')
+    setColor(doc, DARK)
+    doc.text(
+      `Payment in ${cur}. Bank account accepts ${cur} via SWIFT — see bank details below.`,
+      mL + 5,
+      noteY + 1
+    )
   }
 
   // ─── 7. FOOTER ────────────────────────────────────────
